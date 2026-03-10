@@ -140,17 +140,24 @@ async def start_scan(point_id: str):
 async def _run_scan(point_id: str):
     """バックグラウンドでスキャンを実行"""
     try:
-        from src.api.ws import broadcast_progress
+        from src.api.ws import broadcast_progress, broadcast_json
         await state.scan_manager.start_point_scan(
             point_id=point_id,
             progress_callback=broadcast_progress,
         )
+        # 完了通知をWebSocketにブロードキャスト
+        await broadcast_json({
+            "type": "scan_complete",
+            "point_id": point_id,
+        })
     except RuViewError as e:
         logger.error(f"Scan error: {e.format()}")
         from src.api.ws import broadcast_error
         await broadcast_error(point_id, str(e))
     except Exception as e:
         logger.error(f"Scan exception: {e}", exc_info=True)
+        from src.api.ws import broadcast_error
+        await broadcast_error(point_id, str(e))
 
 
 @router.get("/scan/{point_id}/status")
