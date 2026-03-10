@@ -56,7 +56,7 @@ class PhaseCalibrator:
             n_subcarriers=frame.n_subcarriers,
             n_tx=frame.n_tx,
             n_rx=frame.n_rx,
-            amplitude=frame.amplitude,
+            amplitude=frame.amplitude.copy(),
             phase=calibrated_phase,
         )
 

@@ -168,7 +168,26 @@ class PicoScenesAdapter(CSIAdapter):
 
 
 class SimulatedAdapter(CSIAdapter):
-    """テスト・デモ用シミュレーションCSIアダプタ"""
+    """
+    テスト・デモ用 物理ベース シミュレーションCSIアダプタ
+
+    マルチパスモデル:
+        H(f_k) = Σ α_n · exp(-j 2π f_k τ_n)
+    ここで α_n は反射強度、τ_n = 2·d_n / c は往復遅延。
+    計測点(point_id)ごとに壁までの距離が異なるため、
+    ToF推定→部屋寸法推定が意味のある値を返す。
+    """
+
+    SPEED_OF_LIGHT = 299_792_458.0
+
+    # 部屋内のシミュレーション配管/配線の位置 (x, y, z, material, radius)
+    PIPE_SCATTERERS = [
+        (1.0, 2.5, 0.1, 'metal', 0.15),   # 床下金属管 (東西方向)
+        (5.5, 2.5, 0.1, 'metal', 0.12),
+        (3.0, 1.5, 2.65, 'wire', 0.08),   # 天井裏配線
+        (3.5, 3.5, 2.65, 'wire', 0.06),
+        (5.5, 1.5, 1.3, 'pvc', 0.10),     # 壁内塩ビ管
+    ]
 
     def __init__(self, channel: int = 36, bandwidth: int = 80,
                  num_subcarriers: int = 234, num_tx: int = 2,
@@ -181,10 +200,33 @@ class SimulatedAdapter(CSIAdapter):
         self.num_tx = num_tx
         self.num_rx = num_rx
         self.sample_rate = sample_rate
-        self.room_dims = room_dims
+        self.room_dims = room_dims       # (width, depth, height)
         self.point_id = point_id
+        self._position = self._point_to_position(point_id)
+        # ルーター位置 = 部屋中央, 床上0.8m
+        self._router_pos = (room_dims[0] / 2, room_dims[1] / 2, 0.8)
         self._connected = False
         self._frame_count = 0
+
+    def _point_to_position(self, point_id: str) -> tuple:
+        """計測点IDから部屋内の絶対座標を返す"""
+        w, d, h = self.room_dims
+        mh = 0.75  # ノートPC高さ
+        positions = {
+            'north':  (w / 2, 1.0, mh),
+            'east':   (w - 1.0, d / 2, mh),
+            'south':  (w / 2, d - 1.0, mh),
+            'west':   (1.0, d / 2, mh),
+            'center': (w / 2, d / 2, mh),
+        }
+        return positions.get(point_id, (w / 2, d / 2, mh))
+
+    def set_point(self, point_id: str, position: tuple = None):
+        """計測点を切り替える (DualBandCollector から呼ばれる)"""
+        self.point_id = point_id
+        self._position = position if position else self._point_to_position(point_id)
+        self._frame_count = 0
+        logger.info(f"シミュレーション計測点変更: {point_id} → pos={self._position}")
 
     async def connect(self) -> None:
         self._connected = True
@@ -207,6 +249,63 @@ class SimulatedAdapter(CSIAdapter):
         self.num_sc = num_subcarriers
         self._frame_count = 0
 
+    def _build_multipath_components(self) -> list:
+        """
+        計測点とルーター位置に基づくマルチパス成分を構築
+
+        Returns:
+            list of (distance_m, amplitude, label)
+            distance は片道距離 (ToFはこれの2倍/c で計算)
+        """
+        px, py, pz = self._position
+        rx, ry, rz = self._router_pos
+        w, d, h = self.room_dims
+
+        paths = []
+
+        # 0. 直接波: PC ↔ ルーター
+        d_direct = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-rz)**2)
+        paths.append((d_direct, 1.0, 'direct'))
+
+        # 1. 壁反射 (鏡像法: ルーターの鏡像からPCまでの距離)
+        # 北壁 (y=0): ルーターのy鏡像 = -ry
+        d_north = np.sqrt((px-rx)**2 + (py-(-ry))**2 + (pz-rz)**2)
+        paths.append((d_north, 0.65, 'north_wall'))
+
+        # 南壁 (y=d): ルーターのy鏡像 = 2d - ry
+        d_south = np.sqrt((px-rx)**2 + (py-(2*d-ry))**2 + (pz-rz)**2)
+        paths.append((d_south, 0.65, 'south_wall'))
+
+        # 西壁 (x=0): ルーターのx鏡像 = -rx
+        d_west = np.sqrt(((-rx)-px)**2 + (py-ry)**2 + (pz-rz)**2)
+        paths.append((d_west, 0.60, 'west_wall'))
+
+        # 東壁 (x=w): ルーターのx鏡像 = 2w - rx
+        d_east = np.sqrt(((2*w-rx)-px)**2 + (py-ry)**2 + (pz-rz)**2)
+        paths.append((d_east, 0.60, 'east_wall'))
+
+        # 天井 (z=h): ルーターのz鏡像 = 2h - rz
+        d_ceil = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-(2*h-rz))**2)
+        paths.append((d_ceil, 0.50, 'ceiling'))
+
+        # 床 (z=0): ルーターのz鏡像 = -rz
+        d_floor = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-(-rz))**2)
+        paths.append((d_floor, 0.50, 'floor'))
+
+        # 2. 配管・配線の散乱
+        for (sx, sy, sz, material, rad) in self.PIPE_SCATTERERS:
+            # PC→散乱体→ルーターの往復距離
+            d_pc_scat = np.sqrt((px-sx)**2 + (py-sy)**2 + (pz-sz)**2)
+            d_scat_rt = np.sqrt((rx-sx)**2 + (ry-sy)**2 + (rz-sz)**2)
+            d_total = d_pc_scat + d_scat_rt
+            # 材質による反射強度
+            amp = {'metal': 0.45, 'wire': 0.20, 'pvc': 0.15}.get(material, 0.10)
+            # 距離減衰
+            amp *= min(1.0, 2.0 / max(d_total, 0.5))
+            paths.append((d_total, amp, f'pipe_{material}'))
+
+        return paths
+
     async def read_frame(self) -> Optional[CSIFrame]:
         if not self._connected:
             return None
@@ -216,39 +315,39 @@ class SimulatedAdapter(CSIAdapter):
 
         n_streams = self.num_tx * self.num_rx
 
-        # ベース信号: マルチパス伝搬をシミュレーション
-        # 直接波 + 壁反射(4面) + 天井/床反射
-        base_amp = np.ones((self.num_sc, n_streams)) * 0.8
+        # サブキャリア周波数を構築
+        center_freq = self._channel_to_freq(self.channel)
+        bw_hz = self.bandwidth * 1e6
+        delta_f = bw_hz / self.num_sc
+        subcarrier_freqs = (center_freq - bw_hz / 2 + delta_f / 2
+                            + np.arange(self.num_sc) * delta_f)
 
-        # 周波数依存のフェージング
-        freq_idx = np.arange(self.num_sc)
+        # マルチパス成分を取得 (計測点依存)
+        paths = self._build_multipath_components()
+
+        # H(f_k) = Σ α_n · exp(-j 2π f_k τ_n) をストリームごとに計算
+        amplitude = np.zeros((self.num_sc, n_streams))
+        phase = np.zeros((self.num_sc, n_streams))
+
         for stream in range(n_streams):
-            # 壁反射による周期的パターン
-            base_amp[:, stream] += 0.15 * np.sin(freq_idx * 0.2 + stream * 0.5)
-            base_amp[:, stream] += 0.08 * np.cos(freq_idx * 0.05 + self._frame_count * 0.001)
+            h = np.zeros(self.num_sc, dtype=complex)
+            for dist, amp, label in paths:
+                tau = 2.0 * dist / self.SPEED_OF_LIGHT  # 往復遅延
+                # ストリームごとの微小位相差 (アンテナ間隔)
+                stream_phase = stream * 0.3
+                alpha = amp * np.exp(1j * stream_phase)
+                h += alpha * np.exp(-1j * 2 * np.pi * subcarrier_freqs * tau)
 
-        # 配管・配線による局所的反射
-        pipe_positions = [0.2, 0.45, 0.7]  # 正規化位置
-        for pos in pipe_positions:
-            center = int(pos * self.num_sc)
-            width = max(3, self.num_sc // 30)
-            start = max(0, center - width)
-            end = min(self.num_sc, center + width)
-            intensity = 0.3 + 0.05 * np.sin(self._frame_count * 0.01)
-            base_amp[start:end, :] += intensity
+            # 微小ノイズ (熱雑音 + 量子化ノイズ)
+            noise = (np.random.normal(0, 0.015, self.num_sc) +
+                     1j * np.random.normal(0, 0.015, self.num_sc))
+            h += noise
 
-        # ノイズ
-        base_amp += np.random.normal(0, 0.02, (self.num_sc, n_streams))
-        base_amp = np.clip(base_amp, 0.01, 5.0)
+            # 時間変動 (小さなフェージング)
+            h *= (1 + 0.005 * np.sin(self._frame_count * 0.01 + stream * 0.5))
 
-        # 位相: 距離に対応する線形位相 + ノイズ
-        base_phase = np.zeros((self.num_sc, n_streams))
-        for stream in range(n_streams):
-            base_phase[:, stream] = (
-                -2 * np.pi * freq_idx * 0.01  # 直接波の位相勾配
-                + 0.3 * np.sin(freq_idx * 0.15)  # 反射波
-                + np.random.normal(0, 0.1, self.num_sc)
-            )
+            amplitude[:, stream] = np.abs(h)
+            phase[:, stream] = np.angle(h)
 
         freq_band = '2.4GHz' if self.channel <= 14 else '5GHz'
 
@@ -263,9 +362,21 @@ class SimulatedAdapter(CSIAdapter):
             n_subcarriers=self.num_sc,
             n_tx=self.num_tx,
             n_rx=self.num_rx,
-            amplitude=base_amp.astype(np.float64),
-            phase=base_phase.astype(np.float64),
+            amplitude=amplitude.astype(np.float64),
+            phase=phase.astype(np.float64),
         )
+
+    @staticmethod
+    def _channel_to_freq(channel: int) -> float:
+        """Wi-Fiチャネル番号から中心周波数(Hz)を返す"""
+        if channel <= 14:
+            return (2412 + (channel - 1) * 5) * 1e6
+        elif channel <= 64:
+            return (5180 + (channel - 36) * 5) * 1e6
+        elif channel <= 144:
+            return (5500 + (channel - 100) * 5) * 1e6
+        else:
+            return (5745 + (channel - 149) * 5) * 1e6
 
 
 def create_adapter(source: str, config: dict) -> CSIAdapter:

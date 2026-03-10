@@ -16,7 +16,7 @@ from src.utils.math_utils import (
     tof_steering_vector, find_peaks_1d,
     spatial_smoothing, get_subcarrier_frequencies,
 )
-from src.utils.geo_utils import SPEED_OF_LIGHT
+from src.utils.geo_utils import SPEED_OF_LIGHT, channel_to_freq
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class ToFEstimator:
 
         # フレーム情報から周波数パラメータを設定
         ref = frames[0]
-        center_freq = 2.412e9 if ref.frequency_band == '2.4GHz' else 5.18e9
+        center_freq = channel_to_freq(ref.channel)
         bw_mhz = ref.bandwidth
         n_sc = ref.n_subcarriers
 

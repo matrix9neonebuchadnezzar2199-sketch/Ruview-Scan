@@ -112,7 +112,15 @@ class StructureDetector:
 
     def _classify_material(self, intensity: float, length: float,
                            dx: float, dy: float) -> str:
-        """反射強度と形状から材質を分類"""
+        """
+        反射強度と形状から材質を分類
+
+        NOTE: detect() の metal_threshold(0.6) / nonmetal_threshold(0.35) は
+        連結成分マスクの閾値（粗いフィルタ）。
+        ここでの 0.7/0.5/0.35 は成分内の平均強度に基づく細分類閾値。
+        意図的な多段分類: 例えば強度0.6~0.7 の metal_mask 成分は
+        アスペクト比で wire/metal に再分類される。
+        """
         if intensity >= 0.7:
             return 'metal'
         elif intensity >= 0.5:

@@ -10,6 +10,26 @@ from typing import List, Tuple, Optional
 SPEED_OF_LIGHT = 299_792_458.0
 
 
+def channel_to_freq(channel: int) -> float:
+    """
+    Wi-Fiチャネル番号から中心周波数(Hz)を返す
+
+    2.4GHz: ch1(2412MHz) ~ ch14(2484MHz)
+    5GHz:   ch36(5180MHz) ~ ch64(5320MHz), ch100(5500MHz) ~ ch144(5720MHz),
+            ch149(5745MHz) ~ ch165(5825MHz)
+    """
+    if channel <= 14:
+        if channel == 14:
+            return 2484e6
+        return (2412 + (channel - 1) * 5) * 1e6
+    elif channel <= 64:
+        return (5180 + (channel - 36) * 5) * 1e6
+    elif channel <= 144:
+        return (5500 + (channel - 100) * 5) * 1e6
+    else:
+        return (5745 + (channel - 149) * 5) * 1e6
+
+
 @dataclass
 class RoomDimensions:
     """部屋の寸法"""

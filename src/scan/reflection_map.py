@@ -108,7 +108,14 @@ class ReflectionMapGenerator:
         return maps
 
     def _estimate_angles(self, point_id: str, target_face: str):
-        """計測点から対象面への推定角度セット"""
+        """
+        計測点から対象面への推定角度セット
+
+        TODO (Phase B): 現在は固定値の角度リストを使用している。
+        AoAEstimator の結果を generate() に渡し、実測角度を使用するよう
+        変更すべき。2×2 MIMOの制約で角度分解能は限定的だが、
+        固定値よりは有意に改善する。
+        """
         # 簡易版: 主方向と斜め方向のサンプリング
         base_angles = {
             ('north', 'north'): [(np.pi, 0)],

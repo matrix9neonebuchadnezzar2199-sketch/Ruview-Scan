@@ -2,12 +2,13 @@
 RuView Scan - REST API エンドポイント
 """
 
+import asyncio
 import logging
 import time
+from typing import List, Optional, Set
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 
 from src.api.server import state
 from src.errors import RuViewError
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 _start_time = time.time()
+
+# H3修正: バックグラウンドタスクの参照を保持してGC防止
+_background_tasks: Set[asyncio.Task] = set()
 
 
 # ===== DTOs =====
@@ -125,8 +129,9 @@ async def start_scan(point_id: str):
 
     try:
         # 非同期でスキャン実行 (結果はWebSocketで通知)
-        import asyncio
-        asyncio.create_task(_run_scan(point_id))
+        task = asyncio.create_task(_run_scan(point_id))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
         return {"status": "started", "point_id": point_id}
     except RuViewError as e:
         raise HTTPException(400, detail=e.format())
@@ -240,7 +245,11 @@ async def build_result():
             try:
                 from src.scan.foreign_detector import ForeignDetector
                 from src.rf.scanner import RFScanner
-                rf_scanner = RFScanner()
+                nic_cfg = state.config.get("nic", {})
+                rf_iface = nic_cfg.get("interface", "wlan0")
+                if state.nic_info:
+                    rf_iface = state.nic_info.interface
+                rf_scanner = RFScanner(interface=rf_iface)
                 fd = ForeignDetector(rf_scanner)
                 import asyncio
                 foreign = await fd.detect(session, maps, all_structures)

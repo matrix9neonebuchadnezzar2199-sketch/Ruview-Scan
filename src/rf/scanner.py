@@ -135,10 +135,26 @@ class RFScanner:
         )
 
     def _freq_to_channel(self, freq: int) -> int:
-        """周波数からチャネル番号を計算"""
-        if freq < 5000:
+        """周波数(MHz)からチャネル番号を計算"""
+        # 2.4 GHz 帯
+        if 2412 <= freq <= 2484:
+            if freq == 2484:
+                return 14
             return (freq - 2412) // 5 + 1
-        return (freq - 5180) // 5 + 36
+        # 5 GHz 帯: ch36-64 (5180-5320)
+        elif 5180 <= freq <= 5320:
+            return (freq - 5180) // 5 + 36
+        # 5 GHz 帯: ch100-144 (5500-5720)
+        elif 5500 <= freq <= 5720:
+            return (freq - 5500) // 5 + 100
+        # 5 GHz 帯: ch149-165 (5745-5825)
+        elif 5745 <= freq <= 5825:
+            return (freq - 5745) // 5 + 149
+        # フォールバック
+        elif freq < 5000:
+            return max(1, (freq - 2412) // 5 + 1)
+        else:
+            return max(36, (freq - 5180) // 5 + 36)
 
     def _simulate_scan(self) -> List[RFDevice]:
         """シミュレーション用のダミースキャン結果"""

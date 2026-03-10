@@ -71,9 +71,9 @@ const ScanControl = (function() {
         const statusEl = document.getElementById('spStatus-' + idx);
         const fill24 = document.getElementById('fill24-' + idx);
 
-        statusEl.textContent = '2.4 GHz 計測中... (30秒)';
+        statusEl.textContent = '[SIM] 2.4 GHz 計測中... (30秒)';
         statusEl.className = 'sp-status active-status';
-        RuView.addLog(`  2.4 GHz CSI取得開始 (ch1, 40MHz, 114 subcarriers)`, 'log-warn');
+        RuView.addLog(`  [SIM] 2.4 GHz CSI取得開始 (ch1, 40MHz, 114 subcarriers)`, 'log-warn');
 
         for (let t = 0; t <= 30; t++) {
             sp.pct24 = Math.round((t / 30) * 100);

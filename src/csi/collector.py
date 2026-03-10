@@ -66,6 +66,7 @@ class DualBandCollector:
         # === 2.4GHz Phase ===
         logger.info(f"[{point_id}] 2.4GHz CSI取得開始")
         if self._is_simulated:
+            self.adapter.set_point(point_id, position)
             self.adapter.configure(channel=1, bandwidth=40, num_subcarriers=114)
 
         capture.frames_24ghz = await self._collect_band(
@@ -104,7 +105,8 @@ class DualBandCollector:
             duration = self.duration_per_band / self.simulate_speedup
 
         start_time = time.time()
-        target_frames = int(self.duration_per_band * self.sample_rate)
+        # ⑥修正: target_frames もスピードアップを考慮
+        target_frames = int(duration * self.sample_rate)
 
         try:
             async for frame in self.adapter.stream(timeout=duration + 5):
