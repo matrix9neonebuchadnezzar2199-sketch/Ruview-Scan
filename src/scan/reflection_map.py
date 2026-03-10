@@ -56,22 +56,24 @@ class ReflectionMapGenerator:
             n_cols = max(1, int(w / self.grid_resolution))
             n_rows = max(1, int(h / self.grid_resolution))
             grid = np.zeros((n_rows, n_cols))
-
             # 各計測点からの反射を累積
             for point_id, capture in session.captures.items():
                 position = get_measurement_position(point_id, self.room)
 
-                frames = []
-                if band in ('24', 'mix'):
-                    frames.extend(capture.frames_24ghz)
-                if band in ('5', 'mix'):
-                    frames.extend(capture.frames_5ghz)
-
-                if not frames:
-                    continue
-
                 # ToF推定でマルチパスを分離
-                paths = self.tof_estimator.estimate_tof(frames[:500])
+                # 2.4GHz と 5GHz を別々に推定 (サブキャリア数が異なるため混合不可)
+                paths = []
+                if band in ('24', 'mix') and capture.frames_24ghz:
+                    paths.extend(self.tof_estimator.estimate_tof(
+                        capture.frames_24ghz[:250]
+                    ))
+                if band in ('5', 'mix') and capture.frames_5ghz:
+                    paths.extend(self.tof_estimator.estimate_tof(
+                        capture.frames_5ghz[:250]
+                    ))
+
+                if not paths:
+                    continue
 
                 # 各パスの反射点をグリッドに投影
                 for path in paths:

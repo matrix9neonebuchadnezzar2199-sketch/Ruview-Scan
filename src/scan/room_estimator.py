@@ -123,7 +123,13 @@ class RoomEstimator:
 
         # 天井距離の推定 (全計測点共通)
         if len(wall_paths) >= 3:
-            distances['ceiling'] = max(1.5, wall_paths[-1].distance)
+            # 天井高は通常 2.0~4.0m なのでフィルタリング
+            ceil_candidate = wall_paths[-1].distance
+            if ceil_candidate > 5.0:
+                # マルチバウンスの可能性 → デフォルト値
+                distances['ceiling'] = 2.0
+            else:
+                distances['ceiling'] = max(1.5, ceil_candidate)
 
         return distances
 
