@@ -1,0 +1,67 @@
+app:
+  name: "RuView Scan"
+  version: "1.0.0"
+
+nic:
+  interface: auto
+  monitor_interface: wlan0mon
+
+measurement:
+  points:
+    - id: north
+      label: "北壁側 (pos.1)"
+      description: "ノートPCを北壁から1mの位置に配置"
+    - id: east
+      label: "東壁側 (pos.2)"
+      description: "ノートPCを東壁から1mの位置に配置"
+    - id: south
+      label: "南壁側 (pos.3)"
+      description: "ノートPCを南壁から1mの位置に配置"
+    - id: west
+      label: "西壁側 (pos.4)"
+      description: "ノートPCを西壁から1mの位置に配置"
+    - id: center
+      label: "中心 (pos.5)"
+      description: "ノートPCを部屋中央に配置"
+
+  duration_per_band: 30        # 秒（1バンドあたり）
+  bands:
+    - frequency: 2.4GHz
+      channel: 1
+      bandwidth: 40            # MHz
+      subcarriers: 114
+    - frequency: 5GHz
+      channel: 36
+      bandwidth: 80            # MHz
+      subcarriers: 234
+  sample_rate: 100             # Hz
+
+csi:
+  source: simulate             # 'picoscenes' or 'simulate'
+  udp_port: 5500
+
+analysis:
+  tof:
+    method: music              # 'ifft', 'music', 'esprit'
+    n_paths: 8                 # 推定パス数
+  aoa:
+    method: music
+  reflection_map:
+    grid_resolution: 0.05     # メートル（5cm）
+    gaussian_sigma: 2.0       # 平滑化パラメータ
+  structure_detection:
+    metal_threshold: 0.6
+    nonmetal_threshold: 0.35
+    min_length: 0.3           # メートル
+  foreign_detection:
+    rf_enabled: true
+    csi_residual_threshold: 0.5
+    min_cluster_size: 3       # ピクセル
+
+server:
+  host: 127.0.0.1
+  port: 8080
+
+logging:
+  level: INFO
+  file: ./logs/ruview-scan.log
