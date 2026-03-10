@@ -10,6 +10,8 @@ const RuView = (function() {
     let currentFreq = 'mix';
     let scanned = false;
     const filters = { infra: true, foreign: true, heatmap: true };
+    let roomConfirmed = false;
+    const manualRoom = { w: 0, d: 0, h: 0 };
 
     const ROOM = { w: 7.2, d: 5.4, h: 2.7 };
 
@@ -138,6 +140,52 @@ const RuView = (function() {
         Room3D.draw(room3dCanvas, ROOM, currentView, scanned, VIEW_DATA);
     }
 
+    /** Confirm manual room dimensions */
+    function confirmRoom() {
+        const w = parseFloat(document.getElementById('inputW').value);
+        const d = parseFloat(document.getElementById('inputD').value);
+        const h = parseFloat(document.getElementById('inputH').value);
+
+        if (!w || !d || !h || w < 1 || d < 1 || h < 1) {
+            alert('幅・奥行・天井高をすべて正の数で入力してください（1m以上）');
+            return;
+        }
+
+        manualRoom.w = w;
+        manualRoom.d = d;
+        manualRoom.h = h;
+        roomConfirmed = true;
+
+        // UI更新
+        document.getElementById('roomInputWarn').classList.add('hidden');
+        document.getElementById('roomConfirmed').classList.remove('hidden');
+        document.getElementById('roomConfirmedText').textContent = `${w}m × ${d}m × ${h}m`;
+
+        // 入力フィールドを読み取り専用に
+        document.getElementById('inputW').readOnly = true;
+        document.getElementById('inputD').readOnly = true;
+        document.getElementById('inputH').readOnly = true;
+        document.getElementById('btnConfirmRoom').disabled = true;
+        document.getElementById('btnConfirmRoom').textContent = '確定済み';
+
+        // VIEW_DATAの寸法を更新
+        ROOM.w = w; ROOM.d = d; ROOM.h = h;
+        VIEW_DATA.floor.w = w; VIEW_DATA.floor.h = d;
+        VIEW_DATA.ceiling.w = w; VIEW_DATA.ceiling.h = d;
+        VIEW_DATA.north.w = w; VIEW_DATA.north.h = h;
+        VIEW_DATA.south.w = w; VIEW_DATA.south.h = h;
+        VIEW_DATA.east.w = d; VIEW_DATA.east.h = h;
+        VIEW_DATA.west.w = d; VIEW_DATA.west.h = h;
+
+        addLog(`部屋寸法確定: ${w}m × ${d}m × ${h}m`, 'log-info');
+        render();
+    }
+
+    /** Check if room is confirmed before scan */
+    function isRoomReady() {
+        return roomConfirmed;
+    }
+
     /** Build result (API call) */
     async function buildResult() {
         addLog('=== 3D化処理開始 ===', 'log-info');
@@ -148,20 +196,37 @@ const RuView = (function() {
         btn.textContent = '処理中...';
 
         try {
-            const resp = await fetch(`${API}/build`, { method: 'POST' });
+            // 手動入力寸法をクエリパラメータに追加
+            let url = `${API}/build`;
+            if (roomConfirmed && manualRoom.w > 0) {
+                const params = new URLSearchParams({
+                    manual_width: manualRoom.w,
+                    manual_depth: manualRoom.d,
+                    manual_height: manualRoom.h,
+                });
+                url = `${API}/build?${params}`;
+            }
+
+            const resp = await fetch(url, { method: 'POST' });
             if (resp.ok) {
                 const data = await resp.json();
                 applyBuildResult(data);
                 addLog('  サーバー応答: 3D化完了', 'log-info');
-                return;
+                addLog('=== 3D化完了 ===', 'log-info');
+            } else {
+                const errText = await resp.text();
+                addLog(`  サーバーエラー (${resp.status}): ${errText}`, 'log-warn');
+                addLog('  ローカルシミュレーションにフォールバック', 'log-warn');
+                await simulateBuild();
             }
         } catch(e) {
-            addLog('  API接続失敗 — ローカルシミュレーションで3D化', 'log-warn');
+            addLog(`  API接続失敗: ${e.message} — ローカルシミュレーションで3D化`, 'log-warn');
+            await simulateBuild();
+        } finally {
+            // 成功・失敗に関わらず、必ずボタンを復元
+            btn.disabled = false;
+            btn.textContent = 'スキャン結果を 3D 化';
         }
-
-        // Fallback: local simulation
-        await simulateBuild();
-        btn.textContent = 'スキャン結果を 3D 化';
     }
 
     async function simulateBuild() {
@@ -360,6 +425,20 @@ const RuView = (function() {
         document.getElementById('valPipes').textContent = '—';
         document.getElementById('valForeign').textContent = '—';
 
+        // 寸法入力もリセット
+        roomConfirmed = false;
+        manualRoom.w = 0; manualRoom.d = 0; manualRoom.h = 0;
+        document.getElementById('roomInputWarn').classList.remove('hidden');
+        document.getElementById('roomConfirmed').classList.add('hidden');
+        document.getElementById('inputW').readOnly = false;
+        document.getElementById('inputD').readOnly = false;
+        document.getElementById('inputH').readOnly = false;
+        document.getElementById('inputW').value = '';
+        document.getElementById('inputD').value = '';
+        document.getElementById('inputH').value = '';
+        document.getElementById('btnConfirmRoom').disabled = false;
+        document.getElementById('btnConfirmRoom').textContent = '寸法を確定';
+
         ScanControl.resetPoints();
         render();
         addLog('=== セッションリセット ===', 'log-warn');
@@ -381,5 +460,5 @@ const RuView = (function() {
     // Init on load
     window.addEventListener('DOMContentLoaded', init);
 
-    return { switchView, toggleFilter, switchFreq, buildResult, resetAll, addLog, render };
+    return { switchView, toggleFilter, switchFreq, buildResult, resetAll, addLog, render, confirmRoom, isRoomReady };
 })();

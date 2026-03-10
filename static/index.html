@@ -83,6 +83,26 @@
       ③ 2.4GHz(30秒)+5GHz(30秒)=1分/箇所を自動計測<br>
       ④ 全5箇所完了後「スキャン結果を3D化」を実行
     </div>
+    <div class="room-input" id="roomInputSection">
+      <h2>部屋寸法入力 (必須)</h2>
+      <div class="room-input-warn" id="roomInputWarn">⚠ スキャン前に部屋寸法を入力してください</div>
+      <div class="room-fields">
+        <div class="room-field">
+          <label>幅 (東西) m</label>
+          <input type="number" id="inputW" step="0.1" min="1" max="50" placeholder="例: 7.2">
+        </div>
+        <div class="room-field">
+          <label>奥行 (南北) m</label>
+          <input type="number" id="inputD" step="0.1" min="1" max="50" placeholder="例: 5.4">
+        </div>
+        <div class="room-field">
+          <label>天井高 m</label>
+          <input type="number" id="inputH" step="0.1" min="1" max="20" placeholder="例: 2.7">
+        </div>
+      </div>
+      <button class="btn" id="btnConfirmRoom" onclick="RuView.confirmRoom()">寸法を確定</button>
+      <div class="room-confirmed hidden" id="roomConfirmed">✓ 確定済み: <span id="roomConfirmedText"></span></div>
+    </div>
     <div class="scan-list" id="scanList"></div>
     <div style="margin-top:6px">
       <button class="btn go" id="btnBuild" onclick="RuView.buildResult()" disabled>スキャン結果を 3D 化</button>

@@ -46,6 +46,10 @@ const ScanControl = (function() {
     }
 
     async function startPointScan(idx) {
+        if (!RuView.isRoomReady()) {
+            alert('先に部屋寸法を入力・確定してください');
+            return;
+        }
         if (scanRunning) return;
         scanRunning = true;
         const sp = SCAN_POINTS[idx];

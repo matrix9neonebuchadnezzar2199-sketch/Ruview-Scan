@@ -7,7 +7,7 @@ import logging
 import time
 from typing import List, Optional, Set
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.api.server import state
@@ -191,7 +191,11 @@ async def get_scan_status():
 
 
 @router.post("/build")
-async def build_result():
+async def build_result(
+    manual_width: Optional[float] = Query(None),
+    manual_depth: Optional[float] = Query(None),
+    manual_height: Optional[float] = Query(None),
+):
     """スキャン結果を3D化 (部屋推定 + 反射マップ + 構造物検出)"""
     if not state.scan_manager or not state.scan_manager.current_session:
         raise HTTPException(400, detail="No scan session")
@@ -204,8 +208,24 @@ async def build_result():
         )
 
     try:
-        # 1. 部屋寸法推定
-        state.room_dims = state.room_estimator.estimate(session)
+        # 1. ToF による部屋寸法推定
+        tof_dims = state.room_estimator.estimate(session)
+        logger.info(f"ToF推定寸法: {tof_dims.width}×{tof_dims.depth}×{tof_dims.height}")
+
+        # 2. 手動入力値との融合 (手動 80%, ToF 20%)
+        if manual_width and manual_depth and manual_height:
+            MANUAL_WEIGHT = 0.8
+            TOF_WEIGHT = 0.2
+            fused_w = round(manual_width * MANUAL_WEIGHT + tof_dims.width * TOF_WEIGHT, 1)
+            fused_d = round(manual_depth * MANUAL_WEIGHT + tof_dims.depth * TOF_WEIGHT, 1)
+            fused_h = round(manual_height * MANUAL_WEIGHT + tof_dims.height * TOF_WEIGHT, 1)
+            from src.utils.geo_utils import RoomDimensions
+            state.room_dims = RoomDimensions(width=fused_w, depth=fused_d, height=fused_h)
+            logger.info(f"融合寸法: {fused_w}×{fused_d}×{fused_h} "
+                        f"(手動: {manual_width}×{manual_depth}×{manual_height})")
+        else:
+            state.room_dims = tof_dims
+            logger.info("手動入力なし — ToF推定値をそのまま使用")
 
         result = {
             "room": {

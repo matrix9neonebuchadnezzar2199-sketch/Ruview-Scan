@@ -78,72 +78,98 @@ class RoomEstimator:
         """
         ToF結果から各壁までの距離を推定
 
-        直接波の次に来る反射波を壁反射と仮定する。
-        計測点の位置から、どの壁の反射かを推定。
+        鏡像法の壁反射では、距離は「計測点から壁までの距離×2」ではなく
+        「計測点→壁鏡像ルーター」の距離として現れる。
+
+        計測点の既知の配置(壁から1m)を利用して、
+        最寄り壁反射を幾何学的に識別する。
         """
         distances = {}
 
-        # 2.4GHz + 5GHz のパスを統合 (5GHzの分解能を優先、2.4GHzで補完)
+        # 2バンドのパスを統合
         all_paths = self._merge_paths(paths_24, paths_5)
 
         if len(all_paths) < 2:
-            # パスが少ない場合はデフォルト値
             return self._default_distances(point_id)
 
-        # 直接波を除いた反射パスを壁反射として割り当て
-        wall_paths = [p for p in all_paths if p.path_type != 'direct']
+        # 直接波を特定 (最短距離のパス)
+        direct_path = all_paths[0] if all_paths else None
+        if direct_path is None:
+            return self._default_distances(point_id)
 
-        # 計測点から壁への距離をマッピング
+        direct_dist = direct_path.distance
+
+        # 壁反射パスの候補: 直接波より遠い全パス
+        reflection_paths = [p for p in all_paths if p.distance > direct_dist + 0.3]
+
+        if not reflection_paths:
+            return self._default_distances(point_id)
+
+        # --- 計測点の配置に基づく壁距離の推定 ---
+        # 近距離反射 = 最寄り壁、遠距離反射 = 反対壁
+        near_wall_candidates = [p for p in reflection_paths if p.distance < direct_dist + 4.0]
+        far_wall_candidates = [p for p in reflection_paths if p.distance >= direct_dist + 4.0]
+
         if point_id == 'north':
-            # 北壁から1m → 北壁への反射は近い、南壁への反射は遠い
-            if len(wall_paths) >= 1:
-                distances['north_wall'] = max(0.5, wall_paths[0].distance)
-            if len(wall_paths) >= 2:
-                distances['south_wall'] = wall_paths[1].distance
+            if near_wall_candidates:
+                distances['north_wall'] = max(0.5, self._mirror_to_wall_dist(
+                    near_wall_candidates[0].distance, direct_dist))
+            if far_wall_candidates:
+                distances['south_wall'] = self._mirror_to_wall_dist(
+                    far_wall_candidates[0].distance, direct_dist)
         elif point_id == 'south':
-            if len(wall_paths) >= 1:
-                distances['south_wall'] = max(0.5, wall_paths[0].distance)
-            if len(wall_paths) >= 2:
-                distances['north_wall'] = wall_paths[1].distance
+            if near_wall_candidates:
+                distances['south_wall'] = max(0.5, self._mirror_to_wall_dist(
+                    near_wall_candidates[0].distance, direct_dist))
+            if far_wall_candidates:
+                distances['north_wall'] = self._mirror_to_wall_dist(
+                    far_wall_candidates[0].distance, direct_dist)
         elif point_id == 'east':
-            if len(wall_paths) >= 1:
-                distances['east_wall'] = max(0.5, wall_paths[0].distance)
-            if len(wall_paths) >= 2:
-                distances['west_wall'] = wall_paths[1].distance
+            if near_wall_candidates:
+                distances['east_wall'] = max(0.5, self._mirror_to_wall_dist(
+                    near_wall_candidates[0].distance, direct_dist))
+            if far_wall_candidates:
+                distances['west_wall'] = self._mirror_to_wall_dist(
+                    far_wall_candidates[0].distance, direct_dist)
         elif point_id == 'west':
-            if len(wall_paths) >= 1:
-                distances['west_wall'] = max(0.5, wall_paths[0].distance)
-            if len(wall_paths) >= 2:
-                distances['east_wall'] = wall_paths[1].distance
+            if near_wall_candidates:
+                distances['west_wall'] = max(0.5, self._mirror_to_wall_dist(
+                    near_wall_candidates[0].distance, direct_dist))
+            if far_wall_candidates:
+                distances['east_wall'] = self._mirror_to_wall_dist(
+                    far_wall_candidates[0].distance, direct_dist)
         elif point_id == 'center':
-            # 中心からは4方向ほぼ等距離
-            for i, wall in enumerate(['north_wall', 'south_wall', 'east_wall', 'west_wall']):
-                if i < len(wall_paths):
-                    distances[wall] = wall_paths[i].distance
+            sorted_refs = sorted(reflection_paths, key=lambda p: p.distance)
+            walls = ['north_wall', 'south_wall', 'east_wall', 'west_wall']
+            for i, wall in enumerate(walls):
+                if i < len(sorted_refs):
+                    distances[wall] = self._mirror_to_wall_dist(
+                        sorted_refs[i].distance, direct_dist)
 
-        # 天井距離の推定
-        # 天井反射は垂直方向の鏡像反射なので、壁反射として割り当て済みの距離を除外し、
-        # 残りの中で最小のものを天井反射と推定する。吹き抜け等にも対応。
-        if wall_paths:
-            # 壁反射として既に割り当てた距離を除外
-            assigned = set()
-            for key in ['north_wall', 'south_wall', 'east_wall', 'west_wall']:
-                if key in distances:
-                    assigned.add(round(distances[key], 1))
-
-            ceil_candidates = []
-            for p in wall_paths:
-                d_rounded = round(p.distance, 1)
-                # 壁に割り当て済みでない & 直接波距離より大きい
-                if d_rounded not in assigned and p.distance > 0.5:
-                    ceil_candidates.append(p.distance)
-
-            if ceil_candidates:
-                # 最小の未割当距離を天井反射と推定
-                # (天井は通常、壁より近いか同程度の距離にある)
-                distances['ceiling'] = min(ceil_candidates)
+        # 天井距離: 壁に割り当てた距離を除外した残りから推定
+        assigned_dists = set(round(d, 1) for d in distances.values())
+        ceil_candidates = [
+            p.distance for p in reflection_paths
+            if round(self._mirror_to_wall_dist(p.distance, direct_dist), 1) not in assigned_dists
+        ]
+        if ceil_candidates:
+            ceil_dist = self._mirror_to_wall_dist(min(ceil_candidates), direct_dist)
+            if ceil_dist > 0.5:
+                distances['ceiling'] = ceil_dist
 
         return distances
+
+    def _mirror_to_wall_dist(self, reflection_dist: float, direct_dist: float) -> float:
+        """
+        鏡像反射距離から壁までの片道距離を推定
+
+        鏡像法: reflection_dist ≈ sqrt(direct_dist² + (2*wall_dist)²)
+        → wall_dist ≈ sqrt(reflection_dist² - direct_dist²) / 2
+        """
+        diff_sq = reflection_dist ** 2 - direct_dist ** 2
+        if diff_sq <= 0:
+            return 0.5
+        return np.sqrt(diff_sq) / 2.0
 
     def _merge_paths(
         self,
