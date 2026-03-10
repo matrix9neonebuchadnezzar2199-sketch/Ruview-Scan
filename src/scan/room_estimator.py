@@ -121,15 +121,27 @@ class RoomEstimator:
                 if i < len(wall_paths):
                     distances[wall] = wall_paths[i].distance
 
-        # 天井距離の推定 (全計測点共通)
-        if len(wall_paths) >= 3:
-            # 天井高は通常 2.0~4.0m なのでフィルタリング
-            ceil_candidate = wall_paths[-1].distance
-            if ceil_candidate > 5.0:
-                # マルチバウンスの可能性 → デフォルト値
-                distances['ceiling'] = 2.0
-            else:
-                distances['ceiling'] = max(1.5, ceil_candidate)
+        # 天井距離の推定
+        # 天井反射は垂直方向の鏡像反射なので、壁反射として割り当て済みの距離を除外し、
+        # 残りの中で最小のものを天井反射と推定する。吹き抜け等にも対応。
+        if wall_paths:
+            # 壁反射として既に割り当てた距離を除外
+            assigned = set()
+            for key in ['north_wall', 'south_wall', 'east_wall', 'west_wall']:
+                if key in distances:
+                    assigned.add(round(distances[key], 1))
+
+            ceil_candidates = []
+            for p in wall_paths:
+                d_rounded = round(p.distance, 1)
+                # 壁に割り当て済みでない & 直接波距離より大きい
+                if d_rounded not in assigned and p.distance > 0.5:
+                    ceil_candidates.append(p.distance)
+
+            if ceil_candidates:
+                # 最小の未割当距離を天井反射と推定
+                # (天井は通常、壁より近いか同程度の距離にある)
+                distances['ceiling'] = min(ceil_candidates)
 
         return distances
 
