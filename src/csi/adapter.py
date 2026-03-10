@@ -18,6 +18,7 @@ import numpy as np
 
 from src.csi.models import CSIFrame
 from src.errors import CSISourceError, CSIParseError, CSINoDataError
+from src.utils.geo_utils import channel_to_freq
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +317,7 @@ class SimulatedAdapter(CSIAdapter):
         n_streams = self.num_tx * self.num_rx
 
         # サブキャリア周波数を構築
-        center_freq = self._channel_to_freq(self.channel)
+        center_freq = channel_to_freq(self.channel)
         bw_hz = self.bandwidth * 1e6
         delta_f = bw_hz / self.num_sc
         subcarrier_freqs = (center_freq - bw_hz / 2 + delta_f / 2
@@ -366,17 +367,6 @@ class SimulatedAdapter(CSIAdapter):
             phase=phase.astype(np.float64),
         )
 
-    @staticmethod
-    def _channel_to_freq(channel: int) -> float:
-        """Wi-Fiチャネル番号から中心周波数(Hz)を返す"""
-        if channel <= 14:
-            return (2412 + (channel - 1) * 5) * 1e6
-        elif channel <= 64:
-            return (5180 + (channel - 36) * 5) * 1e6
-        elif channel <= 144:
-            return (5500 + (channel - 100) * 5) * 1e6
-        else:
-            return (5745 + (channel - 149) * 5) * 1e6
 
 
 def create_adapter(source: str, config: dict) -> CSIAdapter:
