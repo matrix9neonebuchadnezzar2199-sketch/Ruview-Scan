@@ -11,7 +11,9 @@ from scipy.ndimage import gaussian_filter
 
 from src.csi.models import ScanSession, CSIFrame
 from src.scan.tof_estimator import ToFEstimator, PathEstimate
-from src.utils.geo_utils import RoomDimensions, get_measurement_position, project_to_wall
+from src.utils.geo_utils import (
+    RoomDimensions, Point3D, get_measurement_position, project_to_wall
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ReflectionMap:
     """1面の反射強度マップ"""
-    face: str               # 'floor', 'ceiling', 'north', ...
+    face: str
     width_m: float
     height_m: float
-    grid: np.ndarray        # shape: (H_cells, W_cells), 0.0~1.0
-    resolution: float       # m/cell
-    band: str               # '24', '5', 'mix'
+    grid: np.ndarray
+    resolution: float
+    band: str
 
 
 class ReflectionMapGenerator:
@@ -41,7 +43,6 @@ class ReflectionMapGenerator:
     def generate(self, session: ScanSession,
                  band: str = 'mix') -> Dict[str, ReflectionMap]:
         """6面それぞれのReflectionMapを生成"""
-        # 各面のグリッドサイズを計算
         face_specs = {
             'floor': (self.room.width, self.room.depth),
             'ceiling': (self.room.width, self.room.depth),
@@ -56,12 +57,11 @@ class ReflectionMapGenerator:
             n_cols = max(1, int(w / self.grid_resolution))
             n_rows = max(1, int(h / self.grid_resolution))
             grid = np.zeros((n_rows, n_cols))
-            # 各計測点からの反射を累積
+
             for point_id, capture in session.captures.items():
                 position = get_measurement_position(point_id, self.room)
 
-                # ToF推定でマルチパスを分離
-                # 2.4GHz と 5GHz を別々に推定 (サブキャリア数が異なるため混合不可)
+                # バンド別にToF推定
                 paths = []
                 if band in ('24', 'mix') and capture.frames_24ghz:
                     paths.extend(self.tof_estimator.estimate_tof(
@@ -75,13 +75,12 @@ class ReflectionMapGenerator:
                 if not paths:
                     continue
 
-                # 各パスの反射点をグリッドに投影
                 for path in paths:
                     if path.path_type == 'direct':
                         continue
 
-                    # 簡易的な角度推定 (実際はAoAと組み合わせ)
-                    angles = self._estimate_angles(point_id, face)
+                    # 全方向に角度を掃引して対象面に当たるものを収集
+                    angles = self._sweep_angles(position, path.distance, face)
                     for angle_h, angle_v in angles:
                         face_name, u, v = project_to_wall(
                             position, path.distance, angle_h, angle_v, self.room
@@ -109,48 +108,68 @@ class ReflectionMapGenerator:
 
         return maps
 
-    def _estimate_angles(self, point_id: str, target_face: str):
+    def _sweep_angles(self, position: Point3D, distance: float,
+                      target_face: str) -> list:
         """
-        計測点から対象面への推定角度セット
+        計測点から対象面に向けて角度を掃引し、
+        その面に到達し得る角度セットを返す。
 
-        TODO (Phase B): 現在は固定値の角度リストを使用している。
-        AoAEstimator の結果を generate() に渡し、実測角度を使用するよう
-        変更すべき。2×2 MIMOの制約で角度分解能は限定的だが、
-        固定値よりは有意に改善する。
+        幾何学的に対象面上の格子点への角度を計算するため、
+        全ポイント×全面で確実にグリッドへの投影が行われる。
         """
-        # 簡易版: 主方向と斜め方向のサンプリング
-        base_angles = {
-            ('north', 'north'): [(np.pi, 0)],
-            ('north', 'south'): [(0, 0)],
-            ('north', 'east'): [(np.pi/2, 0)],
-            ('north', 'west'): [(-np.pi/2, 0)],
-            ('south', 'north'): [(np.pi, 0)],
-            ('south', 'south'): [(0, 0)],
-            ('east', 'east'): [(np.pi/2, 0)],
-            ('east', 'west'): [(-np.pi/2, 0)],
-            ('west', 'east'): [(np.pi/2, 0)],
-            ('west', 'west'): [(-np.pi/2, 0)],
-            ('center', 'north'): [(np.pi, 0)],
-            ('center', 'south'): [(0, 0)],
-            ('center', 'east'): [(np.pi/2, 0)],
-            ('center', 'west'): [(-np.pi/2, 0)],
-        }
+        w = self.room.width
+        d = self.room.depth
+        h = self.room.height
+        px, py, pz = position.x, position.y, position.z
 
-        # 天井/床への角度
-        if target_face == 'ceiling':
-            return [(0, np.pi/4), (np.pi/2, np.pi/4), (np.pi, np.pi/4), (-np.pi/2, np.pi/4)]
-        if target_face == 'floor':
-            return [(0, -np.pi/4), (np.pi/2, -np.pi/4)]
+        # 対象面上のサンプルポイントを生成
+        targets = []
+        n_samples = 8  # 各軸のサンプル数
 
-        key = (point_id, target_face)
-        angles = base_angles.get(key, [(0, 0)])
+        if target_face == 'north':    # y=0 面
+            for xi in np.linspace(0.1, w - 0.1, n_samples):
+                for zi in np.linspace(0.1, h - 0.1, n_samples):
+                    targets.append((xi, 0.01, zi))
+        elif target_face == 'south':  # y=d 面
+            for xi in np.linspace(0.1, w - 0.1, n_samples):
+                for zi in np.linspace(0.1, h - 0.1, n_samples):
+                    targets.append((xi, d - 0.01, zi))
+        elif target_face == 'west':   # x=0 面
+            for yi in np.linspace(0.1, d - 0.1, n_samples):
+                for zi in np.linspace(0.1, h - 0.1, n_samples):
+                    targets.append((0.01, yi, zi))
+        elif target_face == 'east':   # x=w 面
+            for yi in np.linspace(0.1, d - 0.1, n_samples):
+                for zi in np.linspace(0.1, h - 0.1, n_samples):
+                    targets.append((w - 0.01, yi, zi))
+        elif target_face == 'floor':  # z=0 面
+            for xi in np.linspace(0.1, w - 0.1, n_samples):
+                for yi in np.linspace(0.1, d - 0.1, n_samples):
+                    targets.append((xi, yi, 0.01))
+        elif target_face == 'ceiling':  # z=h 面
+            for xi in np.linspace(0.1, w - 0.1, n_samples):
+                for yi in np.linspace(0.1, d - 0.1, n_samples):
+                    targets.append((xi, yi, h - 0.01))
 
-        # 散乱を追加
-        scattered = []
-        for ah, av in angles:
-            scattered.append((ah, av))
-            for delta in [-0.3, -0.15, 0.15, 0.3]:
-                scattered.append((ah + delta, av))
-                scattered.append((ah, av + delta * 0.5))
+        # 各ターゲットへの角度を計算
+        angles = []
+        for tx, ty, tz in targets:
+            dx = tx - px
+            dy = ty - py
+            dz = tz - pz
+            d_horiz = np.sqrt(dx**2 + dy**2)
 
-        return scattered
+            if d_horiz < 0.001:
+                angle_h = 0.0
+            else:
+                angle_h = np.arctan2(dx, dy)  # sin=dx, cos=dy → 0=north
+
+            d_total_target = np.sqrt(dx**2 + dy**2 + dz**2)
+            if d_total_target < 0.001:
+                angle_v = 0.0
+            else:
+                angle_v = np.arcsin(np.clip(dz / d_total_target, -1, 1))
+
+            angles.append((angle_h, angle_v))
+
+        return angles
