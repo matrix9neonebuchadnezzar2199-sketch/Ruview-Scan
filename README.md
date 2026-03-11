@@ -431,11 +431,6 @@ sudo bash ruview.sh
 ## ライセンス
 
 Private — 無断転載・複製禁止
-'@
-$filePath = "F:\Antigravity_tool\RuView Scan\ruview-scan\README.md"
-Set-Content -Path $filePath -Value $content -Encoding UTF8
-Write-Host "README.md written ($((Get-Content $filePath).Count) lines)" -ForegroundColor Green
-```
 
 ### 主な変更点
 
