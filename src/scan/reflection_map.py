@@ -1,8 +1,16 @@
-"""
-RuView Scan - 反射強度ヒートマップ生成
-========================================
-シミュレーション: 既知の配管3D座標から正確な反射マップを生成
-実機: 距離ベース逆投影 + Phase B で AoA 統合予定
+﻿"""
+RuView Scan - 反射強度ヒートマップ生成 (Phase B: スライドバー深度調整方式)
+============================================================================
+CSI振幅を各面のグリッドに直接マッピングする。
+シミュレーション/実機の区別なく同一ロジックで動作。
+
+方式:
+  各計測点の各CSIフレームについて:
+    1. 全サブキャリア振幅の平均値を取得
+    2. 計測点の位置から各面グリッドセルへの距離を計算
+    3. 距離に応じたガウシアン重みで振幅をグリッドに加算
+  全面を 0.0〜1.0 に正規化し、ガウシアンフィルタで平滑化。
+  表示閾値の制御はフロントエンドのスライドバーに委ねる。
 """
 
 import logging
@@ -13,10 +21,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 from src.csi.models import ScanSession, CSIFrame
-from src.scan.tof_estimator import ToFEstimator, PathEstimate
-from src.utils.geo_utils import (
-    RoomDimensions, Point3D, get_measurement_position,
-)
+from src.utils.geo_utils import RoomDimensions, get_measurement_position
 
 logger = logging.getLogger(__name__)
 
@@ -27,324 +32,256 @@ class ReflectionMap:
     face: str
     width_m: float
     height_m: float
-    grid: np.ndarray
-    resolution: float
+    grid: np.ndarray       # 正規化済み 0.0〜1.0
+    resolution: float      # メートル/セル
     band: str
 
 
 class ReflectionMapGenerator:
-    """5箇所のCSIデータから反射強度ヒートマップを生成"""
+    """5箇所のCSIデータから反射強度ヒートマップを生成 (直接マッピング方式)"""
+
+    # ERR-B01: 面仕様定義
+    FACE_SPECS = {
+        'floor':   {'axes': ('x', 'y'), 'fixed_axis': 'z', 'fixed_val': 0.0},
+        'ceiling': {'axes': ('x', 'y'), 'fixed_axis': 'z', 'fixed_val': 'height'},
+        'north':   {'axes': ('x', 'z'), 'fixed_axis': 'y', 'fixed_val': 0.0},
+        'south':   {'axes': ('x', 'z'), 'fixed_axis': 'y', 'fixed_val': 'depth'},
+        'west':    {'axes': ('y', 'z'), 'fixed_axis': 'x', 'fixed_val': 0.0},
+        'east':    {'axes': ('y', 'z'), 'fixed_axis': 'x', 'fixed_val': 'width'},
+    }
 
     def __init__(self, room_dims: RoomDimensions,
                  grid_resolution: float = 0.05,
-                 gaussian_sigma: float = 2.0):
+                 gaussian_sigma: float = 2.0,
+                 spread_sigma_m: float = 1.5):
+        """
+        Args:
+            room_dims: 部屋寸法
+            grid_resolution: グリッド解像度 (m/セル)
+            gaussian_sigma: 最終平滑化のガウシアンσ (セル単位)
+            spread_sigma_m: 振幅の空間拡散σ (メートル単位)
+        """
         self.room = room_dims
         self.grid_resolution = grid_resolution
         self.gaussian_sigma = gaussian_sigma
-        self.tof_estimator = ToFEstimator(method='music', n_paths=8)
-        self.distance_tolerance = 0.5
+        self.spread_sigma_m = spread_sigma_m
 
     def generate(self, session: ScanSession,
                  band: str = 'mix') -> Dict[str, ReflectionMap]:
-        """6面それぞれのReflectionMapを生成"""
+        """6面それぞれの ReflectionMap を生成"""
 
-        # シミュレーション判定: 全フレームの MAC が AA:BB:CC:DD:EE:FF なら sim
-        is_sim = self._detect_simulation(session)
+        # ERR-B02: 計測点ごとのCSI振幅統計を集約
+        point_amplitudes = self._extract_amplitudes(session, band)
 
-        if is_sim:
-            logger.info("シミュレーション検出 → 既知配管位置から反射マップ生成")
-            return self._generate_from_known_scatterers(session, band)
-        else:
-            logger.info("実機モード → 逆投影法で反射マップ生成")
-            return self._generate_backprojection(session, band)
+        if not point_amplitudes:
+            logger.warning("ERR-B03: 有効なCSIデータがありません")
+            return self._generate_empty_maps(band)
 
-    def _detect_simulation(self, session: ScanSession) -> bool:
-        """シミュレーションモードを判定"""
-        for capture in session.captures.values():
-            frames = capture.frames_24ghz or capture.frames_5ghz
-            if frames:
-                return frames[0].source_mac == "AA:BB:CC:DD:EE:FF"
-        return False
+        logger.info(
+            f"CSI振幅抽出完了: {len(point_amplitudes)}計測点, "
+            f"band={band}"
+        )
 
-    # =========================================================
-    #  シミュレーション: 既知の配管座標から正確な反射マップを生成
-    # =========================================================
-
-    def _generate_from_known_scatterers(
-        self, session: ScanSession, band: str
-    ) -> Dict[str, ReflectionMap]:
-        """SimulatedAdapter.PIPE_SCATTERERS の3D座標を各面に投影"""
-
-        from src.csi.adapter import SimulatedAdapter
-        scatterers = SimulatedAdapter.PIPE_SCATTERERS
-        # (x, y, z, material, radius)
-
-        # 材質 → 反射強度
-        material_strength = {
-            'metal': 1.0,
-            'wire':  0.55,
-            'pvc':   0.40,
-            'stud':  0.65,
-        }
-
-        face_specs = {
-            'floor':   (self.room.width, self.room.depth),
-            'ceiling': (self.room.width, self.room.depth),
-            'north':   (self.room.width, self.room.height),
-            'south':   (self.room.width, self.room.height),
-            'east':    (self.room.depth, self.room.height),
-            'west':    (self.room.depth, self.room.height),
-        }
-
+        # ERR-B04: 各面のグリッドを生成
         maps = {}
-        for face, (fw, fh) in face_specs.items():
-            n_cols = max(1, int(fw / self.grid_resolution))
-            n_rows = max(1, int(fh / self.grid_resolution))
-            grid = np.zeros((n_rows, n_cols))
+        for face in self.FACE_SPECS:
+            grid, fw, fh = self._build_face_grid(face, point_amplitudes)
 
-            for (sx, sy, sz, material, radius) in scatterers:
-                strength = material_strength.get(material, 0.3)
-
-                # 配管が対象面の近くにあるか判定し、面上の (u, v) に投影
-                proj = self._project_scatterer_to_face(
-                    sx, sy, sz, radius, face
-                )
-                if proj is None:
-                    continue
-
-                u, v, proximity = proj  # proximity: 面までの距離 (近いほど強い)
-
-                # 面上のグリッド座標
-                col = int(u / self.grid_resolution)
-                row = int(v / self.grid_resolution)
-
-                # 配管は線状なので、主軸方向に延長して描画
-                length_cells = max(
-                    3, int(radius * 20 / self.grid_resolution)
-                )
-                # 配管の方向を推定 (x/y/zのうち面に平行な軸)
-                line_cells = self._draw_pipe_line(
-                    grid, row, col, n_rows, n_cols,
-                    material, face, sx, sy, sz, strength, proximity
-                )
-
-            # 正規化 + ガウシアンフィルタ
+            # 正規化
             if grid.max() > 0:
                 grid = grid / grid.max()
-            grid = gaussian_filter(grid, sigma=self.gaussian_sigma)
-            grid = np.clip(grid, 0, 1)
 
-            n_above_metal = int(np.sum(grid >= 0.6))
-            n_above_nonmetal = int(np.sum(grid >= 0.35))
+            # ガウシアン平滑化
+            grid = gaussian_filter(grid, sigma=self.gaussian_sigma)
+            grid = np.clip(grid, 0.0, 1.0)
+
+            # 再正規化 (フィルタ後に最大値が1.0になるように)
+            if grid.max() > 0:
+                grid = grid / grid.max()
+
+            n_active = int(np.sum(grid >= 0.3))
             logger.info(
-                f"  {face}: max={grid.max():.3f}, "
-                f"metal域={n_above_metal}, nonmetal域={n_above_nonmetal}"
+                f"  {face}: shape={grid.shape}, "
+                f"max={grid.max():.3f}, active(>=0.3)={n_active}cells"
             )
 
             maps[face] = ReflectionMap(
-                face=face, width_m=fw, height_m=fh,
-                grid=grid, resolution=self.grid_resolution, band=band,
+                face=face,
+                width_m=fw,
+                height_m=fh,
+                grid=grid,
+                resolution=self.grid_resolution,
+                band=band,
             )
 
         return maps
 
-    def _project_scatterer_to_face(
-        self, sx, sy, sz, radius, face
-    ) -> Optional[tuple]:
-        """
-        配管座標 (sx, sy, sz) を面に投影。
-        面に近い（距離 < 閾値）場合のみ (u, v, proximity) を返す。
-        """
-        w = self.room.width
-        d = self.room.depth
-        h = self.room.height
-        threshold = 0.5  # 面から 0.5m 以内なら投影
-
-        if face == 'floor':
-            if sz > threshold:
-                return None
-            return (sx, sy, sz)
-        elif face == 'ceiling':
-            if abs(sz - h) > threshold:
-                return None
-            return (sx, sy, abs(sz - h))
-        elif face == 'north':
-            if sy > threshold:
-                return None
-            return (sx, sz, sy)
-        elif face == 'south':
-            if abs(sy - d) > threshold:
-                return None
-            return (sx, sz, abs(sy - d))
-        elif face == 'west':
-            if sx > threshold:
-                return None
-            return (sy, sz, sx)
-        elif face == 'east':
-            if abs(sx - w) > threshold:
-                return None
-            return (sy, sz, abs(sx - w))
-        return None
-
-    def _draw_pipe_line(
-        self, grid, center_row, center_col,
-        n_rows, n_cols,
-        material, face, sx, sy, sz, strength, proximity
-    ):
-        """配管を線状にグリッドに描画"""
-        # 面への近さで強度を減衰 (近い = 強い)
-        proximity_factor = max(0.3, 1.0 - proximity * 1.5)
-        base_intensity = strength * proximity_factor
-
-        # 配管の方向を決定 (面に平行な主軸)
-        if face in ('floor', 'ceiling'):
-            # 水平面: 配管はx方向またはy方向に走る
-            # 簡易: x座標が端寄りなら南北 (y方向), 中央ならx方向
-            w = self.room.width
-            if sx < w * 0.3 or sx > w * 0.7:
-                # 壁際 → 南北方向 (行方向)
-                self._draw_vertical_line(
-                    grid, center_col, n_rows, n_cols,
-                    base_intensity
-                )
-            else:
-                # 中央寄り → 東西方向 (列方向)
-                self._draw_horizontal_line(
-                    grid, center_row, n_rows, n_cols,
-                    base_intensity
-                )
-        elif face in ('north', 'south'):
-            # 壁面: u=x, v=z
-            # 縦方向 (z方向) の配管
-            self._draw_vertical_line(
-                grid, center_col, n_rows, n_cols,
-                base_intensity
-            )
-        elif face in ('east', 'west'):
-            # 壁面: u=y, v=z
-            self._draw_vertical_line(
-                grid, center_col, n_rows, n_cols,
-                base_intensity
-            )
-
-    def _draw_vertical_line(
-        self, grid, col, n_rows, n_cols, intensity
-    ):
-        """縦方向のライン (全行)"""
-        if 0 <= col < n_cols:
-            # 中心列 + 隣接2列にガウシアン分布
-            for dc in range(-2, 3):
-                c = col + dc
-                if 0 <= c < n_cols:
-                    w = np.exp(-dc**2 / 1.0) * intensity
-                    grid[:, c] += w
-
-    def _draw_horizontal_line(
-        self, grid, row, n_rows, n_cols, intensity
-    ):
-        """横方向のライン (全列)"""
-        if 0 <= row < n_rows:
-            for dr in range(-2, 3):
-                r = row + dr
-                if 0 <= r < n_rows:
-                    w = np.exp(-dr**2 / 1.0) * intensity
-                    grid[r, :] += w
-
-    # =========================================================
-    #  実機モード: 距離ベース逆投影 (Phase B で AoA 統合)
-    # =========================================================
-
-    def _generate_backprojection(
+    def _extract_amplitudes(
         self, session: ScanSession, band: str
-    ) -> Dict[str, ReflectionMap]:
-        """逆投影法 — 実機用 (AoA統合まではベースライン)"""
-        face_specs = {
-            'floor':   (self.room.width, self.room.depth),
-            'ceiling': (self.room.width, self.room.depth),
-            'north':   (self.room.width, self.room.height),
-            'south':   (self.room.width, self.room.height),
-            'east':    (self.room.depth, self.room.height),
-            'west':    (self.room.depth, self.room.height),
-        }
+    ) -> Dict[str, List[float]]:
+        """
+        各計測点のCSIフレームから振幅平均値のリストを抽出。
 
-        face_coords = {}
-        for face, (fw, fh) in face_specs.items():
-            n_cols = max(1, int(fw / self.grid_resolution))
-            n_rows = max(1, int(fh / self.grid_resolution))
-            u_arr = np.linspace(
-                self.grid_resolution / 2,
-                fw - self.grid_resolution / 2, n_cols
-            )
-            v_arr = np.linspace(
-                self.grid_resolution / 2,
-                fh - self.grid_resolution / 2, n_rows
-            )
-            uu, vv = np.meshgrid(u_arr, v_arr)
-            xyz = self._face_uv_to_xyz(face, uu, vv)
-            face_coords[face] = {
-                'n_rows': n_rows, 'n_cols': n_cols,
-                'xyz': xyz, 'fw': fw, 'fh': fh,
-            }
+        Returns:
+            { point_id: [amp_mean_frame1, amp_mean_frame2, ...] }
+        """
+        point_amplitudes: Dict[str, List[float]] = {}
 
-        point_paths = {}
         for point_id, capture in session.captures.items():
-            paths = []
+            amps = []
+
+            # ERR-B05: バンド選択
+            frames_to_use: List[CSIFrame] = []
             if band in ('24', 'mix') and capture.frames_24ghz:
-                paths.extend(self.tof_estimator.estimate_tof(
-                    capture.frames_24ghz[:250]
-                ))
+                frames_to_use.extend(capture.frames_24ghz)
             if band in ('5', 'mix') and capture.frames_5ghz:
-                paths.extend(self.tof_estimator.estimate_tof(
-                    capture.frames_5ghz[:250]
-                ))
-            paths = [p for p in paths if p.path_type != 'direct']
-            if paths:
-                point_paths[point_id] = paths
+                frames_to_use.extend(capture.frames_5ghz)
 
-        maps = {}
-        for face, fc in face_coords.items():
-            grid = np.zeros((fc['n_rows'], fc['n_cols']))
-            xyz = fc['xyz']
+            for frame in frames_to_use:
+                # 全サブキャリア × 全ストリームの振幅平均
+                amp_mean = float(np.mean(frame.amplitude))
+                amps.append(amp_mean)
 
-            for point_id, paths in point_paths.items():
-                pos = get_measurement_position(point_id, self.room)
-                pos_arr = np.array([pos.x, pos.y, pos.z])
-                diff = xyz - pos_arr[np.newaxis, np.newaxis, :]
-                dist_grid = np.sqrt(np.sum(diff ** 2, axis=2))
+            if amps:
+                point_amplitudes[point_id] = amps
+                logger.debug(
+                    f"  {point_id}: {len(amps)} frames, "
+                    f"amp_mean={np.mean(amps):.4f}, "
+                    f"amp_std={np.std(amps):.4f}"
+                )
 
-                for path in paths:
-                    delta = np.abs(dist_grid - path.distance)
-                    weight = np.exp(
-                        -(delta ** 2) / (2 * self.distance_tolerance ** 2)
-                    )
-                    grid += weight * path.amplitude
+        return point_amplitudes
 
-            if grid.max() > 0:
-                grid = grid / grid.max()
-            grid = gaussian_filter(grid, sigma=self.gaussian_sigma)
-            grid = np.clip(grid, 0, 1)
+    def _build_face_grid(
+        self, face: str, point_amplitudes: Dict[str, List[float]]
+    ) -> tuple:
+        """
+        1面のグリッドを構築。
 
-            maps[face] = ReflectionMap(
-                face=face, width_m=fc['fw'], height_m=fc['fh'],
-                grid=grid, resolution=self.grid_resolution, band=band,
-            )
+        各計測点の平均振幅を、計測点から面上グリッドセルへの
+        距離に応じたガウシアン重みで分配する。
 
-        return maps
+        Returns:
+            (grid, face_width_m, face_height_m)
+        """
+        spec = self.FACE_SPECS[face]
+        fw, fh = self._get_face_dimensions(face)
+        n_cols = max(1, int(fw / self.grid_resolution))
+        n_rows = max(1, int(fh / self.grid_resolution))
+        grid = np.zeros((n_rows, n_cols))
 
-    def _face_uv_to_xyz(self, face, uu, vv):
-        """面上 (u,v) → 部屋内 3D 座標"""
+        # 面上の各セルの3D座標を事前計算
+        u_centers = np.linspace(
+            self.grid_resolution / 2,
+            fw - self.grid_resolution / 2,
+            n_cols
+        )
+        v_centers = np.linspace(
+            self.grid_resolution / 2,
+            fh - self.grid_resolution / 2,
+            n_rows
+        )
+        uu, vv = np.meshgrid(u_centers, v_centers)  # (n_rows, n_cols)
+        face_xyz = self._face_uv_to_xyz(face, uu, vv)  # (n_rows, n_cols, 3)
+
+        # ERR-B06: 各計測点からの寄与を加算
+        spread_var = 2.0 * (self.spread_sigma_m ** 2)
+
+        for point_id, amps in point_amplitudes.items():
+            pos = get_measurement_position(point_id, self.room)
+            pos_arr = np.array([pos.x, pos.y, pos.z])
+
+            # 計測点から面上各セルまでの距離
+            diff = face_xyz - pos_arr[np.newaxis, np.newaxis, :]
+            dist_sq = np.sum(diff ** 2, axis=2)  # (n_rows, n_cols)
+
+            # ガウシアン重み: 近いセルほど高い寄与
+            weight = np.exp(-dist_sq / spread_var)
+
+            # この計測点の代表振幅 (全フレームの平均)
+            amp_representative = float(np.mean(amps))
+
+            # フレーム間の分散も活用 (分散が大きい = 動的散乱体がある)
+            amp_variance = float(np.std(amps))
+
+            # 寄与 = 代表振幅 × 空間重み
+            # 分散項を加えることで、静的な壁反射と区別しやすくする
+            contribution = (amp_representative + amp_variance * 2.0) * weight
+            grid += contribution
+
+        return grid, fw, fh
+
+    def _get_face_dimensions(self, face: str) -> tuple:
+        """面の (幅m, 高さm) を返す"""
+        if face in ('floor', 'ceiling'):
+            return (self.room.width, self.room.depth)
+        elif face in ('north', 'south'):
+            return (self.room.width, self.room.height)
+        elif face in ('east', 'west'):
+            return (self.room.depth, self.room.height)
+        # ERR-B07: 未知の面名
+        raise ValueError(f"ERR-B07: Unknown face name: {face}")
+
+    def _face_uv_to_xyz(self, face: str, uu: np.ndarray, vv: np.ndarray) -> np.ndarray:
+        """
+        面上の (u, v) 座標を部屋内の3D座標 (x, y, z) に変換。
+
+        座標系:
+          x: 東西 (0=西壁, width=東壁)
+          y: 南北 (0=北壁, depth=南壁)
+          z: 上下 (0=床, height=天井)
+
+        面とUV軸の対応:
+          floor:   u=x, v=y, z=0
+          ceiling: u=x, v=y, z=height
+          north:   u=x, v=z, y=0
+          south:   u=x, v=z, y=depth
+          west:    u=y, v=z, x=0
+          east:    u=y, v=z, x=width
+        """
         shape = uu.shape
         xyz = np.zeros((*shape, 3))
-        if face == 'north':
-            xyz[..., 0] = uu; xyz[..., 1] = 0.0; xyz[..., 2] = vv
-        elif face == 'south':
-            xyz[..., 0] = uu; xyz[..., 1] = self.room.depth; xyz[..., 2] = vv
-        elif face == 'west':
-            xyz[..., 0] = 0.0; xyz[..., 1] = uu; xyz[..., 2] = vv
-        elif face == 'east':
-            xyz[..., 0] = self.room.width; xyz[..., 1] = uu; xyz[..., 2] = vv
-        elif face == 'floor':
-            xyz[..., 0] = uu; xyz[..., 1] = vv; xyz[..., 2] = 0.0
+
+        if face == 'floor':
+            xyz[..., 0] = uu
+            xyz[..., 1] = vv
+            xyz[..., 2] = 0.0
         elif face == 'ceiling':
-            xyz[..., 0] = uu; xyz[..., 1] = vv; xyz[..., 2] = self.room.height
+            xyz[..., 0] = uu
+            xyz[..., 1] = vv
+            xyz[..., 2] = self.room.height
+        elif face == 'north':
+            xyz[..., 0] = uu
+            xyz[..., 1] = 0.0
+            xyz[..., 2] = vv
+        elif face == 'south':
+            xyz[..., 0] = uu
+            xyz[..., 1] = self.room.depth
+            xyz[..., 2] = vv
+        elif face == 'west':
+            xyz[..., 0] = 0.0
+            xyz[..., 1] = uu
+            xyz[..., 2] = vv
+        elif face == 'east':
+            xyz[..., 0] = self.room.width
+            xyz[..., 1] = uu
+            xyz[..., 2] = vv
+
         return xyz
+
+    def _generate_empty_maps(self, band: str) -> Dict[str, ReflectionMap]:
+        """データなし時の空マップを生成"""
+        maps = {}
+        for face in self.FACE_SPECS:
+            fw, fh = self._get_face_dimensions(face)
+            n_cols = max(1, int(fw / self.grid_resolution))
+            n_rows = max(1, int(fh / self.grid_resolution))
+            maps[face] = ReflectionMap(
+                face=face,
+                width_m=fw,
+                height_m=fh,
+                grid=np.zeros((n_rows, n_cols)),
+                resolution=self.grid_resolution,
+                band=band,
+            )
+        return maps

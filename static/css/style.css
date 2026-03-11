@@ -93,3 +93,15 @@ canvas{display:block;flex:1;min-height:0}
 .room-field input::placeholder{color:#3a4a5a}
 .room-confirmed{font-size:10px;color:#4caf50;margin-top:4px;padding:4px 6px;background:rgba(76,175,80,.08);border-radius:3px}
 .room-confirmed.hidden{display:none}
+
+/* === Phase B: Depth Slider === */
+.slider-bar{display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:6px 10px;background:#0d1220;border:1px solid #1e2a4a;border-radius:4px}
+.slider-group{display:flex;align-items:center;gap:6px;flex:1}
+.slider-label{font-size:10px;color:#6a8a9a;white-space:nowrap;min-width:90px}
+.slider-label span{color:#ce93d8;font-family:'Consolas','Monaco',monospace;font-weight:bold}
+.depth-slider{-webkit-appearance:none;appearance:none;flex:1;height:6px;background:#1a2540;border-radius:3px;outline:none;cursor:pointer}
+.depth-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:#ce93d8;border:2px solid #1a1530;cursor:pointer;transition:box-shadow .2s}
+.depth-slider::-webkit-slider-thumb:hover{box-shadow:0 0 8px rgba(206,147,216,0.6)}
+.depth-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#ce93d8;border:2px solid #1a1530;cursor:pointer}
+.depth-slider::-moz-range-track{height:6px;background:#1a2540;border-radius:3px}
+.slider-hint{font-size:9px;color:#3a4a6a;white-space:nowrap}

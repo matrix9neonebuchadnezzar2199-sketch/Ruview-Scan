@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -40,6 +40,17 @@
       <div class="freq-btn active" data-freq="mix" onclick="RuView.switchFreq('mix')">ミックス (2.4+5GHz)</div>
       <div class="freq-btn" data-freq="24" onclick="RuView.switchFreq('24')">2.4 GHz</div>
       <div class="freq-btn" data-freq="5" onclick="RuView.switchFreq('5')">5 GHz</div>
+    </div>
+    <div class="slider-bar" id="sliderBar">
+      <div class="slider-group">
+        <label class="slider-label">深度下限 <span id="sliderLowerVal">0.00</span></label>
+        <input type="range" id="sliderLower" class="depth-slider" min="0" max="100" value="0" oninput="RuView.onSliderChange()">
+      </div>
+      <div class="slider-group">
+        <label class="slider-label">深度上限 <span id="sliderUpperVal">1.00</span></label>
+        <input type="range" id="sliderUpper" class="depth-slider" min="0" max="100" value="100" oninput="RuView.onSliderChange()">
+      </div>
+      <div class="slider-hint">◀ スライドで壁内の深度を調整</div>
     </div>
     <canvas id="mainCanvas"></canvas>
   </div>

@@ -65,3 +65,9 @@ server:
 logging:
   level: INFO
   file: ./logs/ruview-scan.log
+
+  # Phase B: スライドバー深度調整
+  depth_slider:
+    default_lower: 0.0       # 下限閾値 (0.0〜1.0)
+    default_upper: 1.0       # 上限閾値 (0.0〜1.0)
+    spread_sigma_m: 1.5      # 振幅の空間拡散σ (メートル)
