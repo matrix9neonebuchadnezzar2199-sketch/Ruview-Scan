@@ -7,8 +7,11 @@ const FloorRenderer = (function() {
     function pipeDash(t) { return { wire:[5,4], stud:[2,3] }[t] || []; }
     function pipeWidth(t) { return { metal:4, stud:6, pvc:3 }[t] || 2.5; }
 
-    function drawInfrastructure(ctx, pipes, tx, ty) {
+    function drawInfrastructure(ctx, pipes, tx, ty, lower, upper) {
         for (const p of pipes) {
+            if (typeof p.depth === 'number' && typeof lower === 'number' && typeof upper === 'number') {
+                if (p.depth < lower || p.depth > upper) continue;
+            }
             ctx.beginPath(); ctx.moveTo(tx(p.x1), ty(p.y1)); ctx.lineTo(tx(p.x2), ty(p.y2));
             ctx.strokeStyle = pipeColor(p.type); ctx.lineWidth = pipeWidth(p.type);
             ctx.setLineDash(pipeDash(p.type)); ctx.shadowColor = pipeColor(p.type); ctx.shadowBlur = 8; ctx.stroke();
@@ -19,8 +22,11 @@ const FloorRenderer = (function() {
         }
     }
 
-    function drawForeignObjects(ctx, foreign, tx, ty, scale) {
+    function drawForeignObjects(ctx, foreign, tx, ty, scale, lower, upper) {
         for (const f of foreign) {
+            if (typeof f.depth === 'number' && typeof lower === 'number' && typeof upper === 'number') {
+                if (f.depth < lower || f.depth > upper) continue;
+            }
             const cx = tx(f.x), cy = ty(f.y), pr = f.r * scale;
             const glowR = pr * 2.2;
             // Outer glow

@@ -5,6 +5,7 @@
  */
 const Room3DView = (function() {
     let scene, camera, renderer, controls;
+    let structureGroup = null;
     let roomGroup = null;
     let faceMeshes = {};
     let faceTextures = {};
@@ -270,9 +271,15 @@ const Room3DView = (function() {
         var faces = ["floor", "ceiling", "north", "south", "east", "west"];
         for (var i = 0; i < faces.length; i++) {
             var face = faces[i];
-            if (gridDataMap[face]) {
-                updateFaceTexture(face, gridDataMap[face], lower, upper, colorMapId, opacity);
+            if (!gridDataMap || !gridDataMap[face]) {
+                // ヒートマップOFF: テクスチャを透明にリセット
+                if (faceMeshes[face]) {
+                    faceMeshes[face].material.opacity = 0.05;
+                    faceMeshes[face].material.needsUpdate = true;
+                }
+                continue;
             }
+            updateFaceTexture(face, gridDataMap[face], lower, upper, colorMapId, opacity);
         }
     }
 
@@ -332,11 +339,98 @@ const Room3DView = (function() {
         return new THREE.Sprite(material);
     }
 
+    function _faceUVto3D(face, u, v, w, d, h) {
+        switch(face) {
+            case "floor":   return { x: u - w/2, y: 0.02, z: v - d/2 };
+            case "ceiling": return { x: u - w/2, y: h - 0.02, z: v - d/2 };
+            case "north":   return { x: u - w/2, y: v, z: -d/2 + 0.02 };
+            case "south":   return { x: u - w/2, y: v, z: d/2 - 0.02 };
+            case "east":    return { x: w/2 - 0.02, y: v, z: u - d/2 };
+            case "west":    return { x: -w/2 + 0.02, y: v, z: u - d/2 };
+            default:        return { x: 0, y: 0, z: 0 };
+        }
+    }
+
+    function updateStructures(viewData, room, showInfra, showForeign, lower, upper) {
+        if (!roomGroup) return;
+        if (structureGroup) { roomGroup.remove(structureGroup); structureGroup = null; }
+        structureGroup = new THREE.Group();
+        var w = room.w || 7.2;
+        var d = room.d || 5.4;
+        var h = room.h || 2.7;
+        var pipeColors = { metal: 0xef5350, wire: 0xffa726, pvc: 0x66bb6a, stud: 0xce93d8 };
+
+        if (showInfra) {
+            var faces = ["floor","ceiling","north","south","east","west"];
+            for (var fi = 0; fi < faces.length; fi++) {
+                var faceName = faces[fi];
+                var vd = viewData[faceName];
+                if (!vd || !vd.pipes) continue;
+                for (var pi = 0; pi < vd.pipes.length; pi++) {
+                    var p = vd.pipes[pi];
+                    if (typeof p.depth === 'number' && typeof lower === 'number' && typeof upper === 'number') {
+                        if (p.depth < lower || p.depth > upper) continue;
+                    }
+                    var s3 = _faceUVto3D(faceName, p.x1, p.y1, w, d, h);
+                    var e3 = _faceUVto3D(faceName, p.x2, p.y2, w, d, h);
+                    var color = pipeColors[p.type] || 0x888888;
+                    var dir = new THREE.Vector3(e3.x-s3.x, e3.y-s3.y, e3.z-s3.z);
+                    var length = dir.length();
+                    if (length < 0.01) continue;
+                    dir.normalize();
+                    var radius = p.type === "stud" ? 0.04 : p.type === "metal" ? 0.03 : 0.02;
+                    var tubeGeo = new THREE.CylinderGeometry(radius, radius, length, 8);
+                    var tubeMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
+                    var tube = new THREE.Mesh(tubeGeo, tubeMat);
+                    tube.position.set((s3.x+e3.x)/2, (s3.y+e3.y)/2, (s3.z+e3.z)/2);
+                    var axis = new THREE.Vector3(0, 1, 0);
+                    var quat = new THREE.Quaternion().setFromUnitVectors(axis, dir);
+                    tube.quaternion.copy(quat);
+                    structureGroup.add(tube);
+                }
+            }
+        }
+
+        if (showForeign) {
+            var faces = ["floor","ceiling","north","south","east","west"];
+            for (var fi = 0; fi < faces.length; fi++) {
+                var faceName = faces[fi];
+                var vd = viewData[faceName];
+                if (!vd || !vd.foreign) continue;
+                for (var foi = 0; foi < vd.foreign.length; foi++) {
+                    var fo = vd.foreign[foi];
+                    if (typeof fo.depth === 'number' && typeof lower === 'number' && typeof upper === 'number') {
+                        if (fo.depth < lower || fo.depth > upper) continue;
+                    }
+                    var pos3d = _faceUVto3D(faceName, fo.x, fo.y, w, d, h);
+                    var fRadius = fo.r || 0.15;
+                    var fGeo = new THREE.SphereGeometry(fRadius, 16, 16);
+                    var fMat = new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.7 });
+                    var fMesh = new THREE.Mesh(fGeo, fMat);
+                    fMesh.position.set(pos3d.x, pos3d.y, pos3d.z);
+                    structureGroup.add(fMesh);
+                    var glowGeo = new THREE.SphereGeometry(fRadius*2.5, 16, 16);
+                    var glowMat = new THREE.MeshBasicMaterial({ color: 0xff1744, transparent: true, opacity: 0.15 });
+                    var glowMesh = new THREE.Mesh(glowGeo, glowMat);
+                    glowMesh.position.set(pos3d.x, pos3d.y, pos3d.z);
+                    structureGroup.add(glowMesh);
+                    var fSprite = _createTextSprite(fo.label, "#ff1744", 40);
+                    fSprite.position.set(pos3d.x, pos3d.y + fRadius*3, pos3d.z);
+                    fSprite.scale.set(1.0, 0.5, 1);
+                    structureGroup.add(fSprite);
+                }
+            }
+        }
+
+        roomGroup.add(structureGroup);
+    }
+
     return {
         init: init,
         buildRoom: buildRoom,
         updateFaceTexture: updateFaceTexture,
         updateAllFaces: updateAllFaces,
+        updateStructures: updateStructures,
         startAnimation: startAnimation,
         stopAnimation: stopAnimation,
         resetCamera: resetCamera,

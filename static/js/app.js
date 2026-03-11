@@ -129,7 +129,8 @@ const RuView = (function() {
         var totalP = 0, totalF = 0;
         for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
         console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
-        Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign);
+        var sl3d = { lower: parseFloat(document.getElementById('sliderLower').value), upper: parseFloat(document.getElementById('sliderUpper').value) };
+    Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign, sl3d.lower, sl3d.upper);
         } else {
             render();
         }
@@ -289,12 +290,17 @@ const RuView = (function() {
         if (!three3dInitialized || !scanned) return;
         var lower = parseInt(document.getElementById('sliderLower').value) / 100;
         var upper = parseInt(document.getElementById('sliderUpper').value) / 100;
-        Room3DView.updateAllFaces(GRID_DATA, lower, upper, currentColorMap, heatmapOpacity);
+        if (filters.heatmap) {
+            Room3DView.updateAllFaces(GRID_DATA, lower, upper, currentColorMap, heatmapOpacity);
+        } else {
+            Room3DView.updateAllFaces(null, 0, 1, currentColorMap, 0);
+        }
         console.log('3D structures update:', 'infra=' + filters.infra, 'foreign=' + filters.foreign);
         var totalP = 0, totalF = 0;
         for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
         console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
-        Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign);
+        var sl3d = { lower: parseFloat(document.getElementById('sliderLower').value), upper: parseFloat(document.getElementById('sliderUpper').value) };
+    Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign, sl3d.lower, sl3d.upper);
     }
 
     /** Render main canvas */
@@ -356,11 +362,13 @@ const RuView = (function() {
             return;
         }
 
+        // Slider state (配管・異物の深度フィルタでも使用)
+        var sl = SLIDER_STATE[currentView] || { lower: 0, upper: 1 };
+
         // Heatmap
         if (filters.heatmap) {
             var grid = GRID_DATA[currentView];
             if (grid) {
-                var sl = SLIDER_STATE[currentView];
                 HeatmapRenderer.drawGrid(
                     mainCtx, grid,
                     offX, offY,
@@ -377,12 +385,12 @@ const RuView = (function() {
 
         // Infrastructure
         if (filters.infra) {
-            FloorRenderer.drawInfrastructure(mainCtx, vd.pipes, tx, ty);
+            FloorRenderer.drawInfrastructure(mainCtx, vd.pipes, tx, ty, sl.lower, sl.upper);
         }
 
         // Foreign objects
         if (filters.foreign) {
-            FloorRenderer.drawForeignObjects(mainCtx, vd.foreign, tx, ty, scale);
+            FloorRenderer.drawForeignObjects(mainCtx, vd.foreign, tx, ty, scale, sl.lower, sl.upper);
         }
 
         // Measurement points (floor only)
