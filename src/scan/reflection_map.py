@@ -130,12 +130,14 @@ class ReflectionMapGenerator:
         for point_id, capture in session.captures.items():
             amps = []
 
-            # ERR-B05: バンド選択
+            # ERR-B05: バンド選択 (Phase D: 160MHz対応)
             frames_to_use: List[CSIFrame] = []
             if band in ('24', 'mix') and capture.frames_24ghz:
                 frames_to_use.extend(capture.frames_24ghz)
             if band in ('5', 'mix') and capture.frames_5ghz:
                 frames_to_use.extend(capture.frames_5ghz)
+            if band in ('160', 'mix') and capture.frames_160mhz:
+                frames_to_use.extend(capture.frames_160mhz)
 
             for frame in frames_to_use:
                 # 全サブキャリア × 全ストリームの振幅平均

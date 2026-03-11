@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - 5箇所計測セッション管理
 """
 
@@ -15,12 +15,18 @@ from src.errors import ScanSessionError, ScanAlreadyRunningError, ScanPointError
 logger = logging.getLogger(__name__)
 
 POINT_IDS = ['north', 'east', 'south', 'west', 'center']
+OPTIONAL_POINT_IDS = ['northeast', 'southeast', 'southwest', 'northwest']
+ALL_POINT_IDS = POINT_IDS + OPTIONAL_POINT_IDS
 POINT_LABELS = {
     'north': '① 北壁側 (pos.1)',
     'east': '② 東壁側 (pos.2)',
     'south': '③ 南壁側 (pos.3)',
     'west': '④ 西壁側 (pos.4)',
     'center': '⑤ 中心 (pos.5)',
+    'northeast': '⑥ 北東角 (pos.6)',
+    'southeast': '⑦ 南東角 (pos.7)',
+    'southwest': '⑧ 南西角 (pos.8)',
+    'northwest': '⑨ 北西角 (pos.9)',
 }
 
 
@@ -56,7 +62,7 @@ class ScanManager:
                 'scanning': False,
                 'scanning_point': None,
                 'completed': [],
-                'remaining': POINT_IDS.copy(),
+                'remaining': ALL_POINT_IDS.copy(),
             }
 
         return {
@@ -65,7 +71,7 @@ class ScanManager:
             'scanning_point': self._scanning_point,
             'completed': self.current_session.completed_points,
             'remaining': [
-                p for p in POINT_IDS
+                p for p in ALL_POINT_IDS
                 if p not in self.current_session.completed_points
             ],
             'progress': self.current_session.progress,
@@ -85,7 +91,7 @@ class ScanManager:
         Returns:
             DualBandCapture
         """
-        if point_id not in POINT_IDS:
+        if point_id not in ALL_POINT_IDS:
             raise ScanPointError(point_id, f"無効な計測点ID: {point_id}")
 
         if self.is_scanning:
@@ -135,6 +141,10 @@ class ScanManager:
             'south': (w / 2, d - 1.0, h),
             'west': (1.0, d / 2, h),
             'center': (w / 2, d / 2, h),
+            'northeast': (w - 1.0, 1.0, h),
+            'southeast': (w - 1.0, d - 1.0, h),
+            'southwest': (1.0, d - 1.0, h),
+            'northwest': (1.0, 1.0, h),
         }
         return positions.get(point_id, (w / 2, d / 2, h))
 

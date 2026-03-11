@@ -1,4 +1,4 @@
-/**
+﻿/**
  * RuView Scan - 6面描画エンジン (配管ライン + 異物グロー)
  */
 const FloorRenderer = (function() {
@@ -58,6 +58,11 @@ const FloorRenderer = (function() {
             { x: ROOM.w / 2, y: ROOM.d - 0.4, label: 'pos.3' },
             { x: 0.4, y: ROOM.d / 2, label: 'pos.4' },
             { x: ROOM.w / 2, y: ROOM.d / 2 + 0.01, label: 'pos.5', skip: true },
+            // Phase D: 4隅の追加測定点
+            { x: ROOM.w - 1.0, y: 1.0, label: 'pos.6', isOpt: true },
+            { x: ROOM.w - 1.0, y: ROOM.d - 1.0, label: 'pos.7', isOpt: true },
+            { x: 1.0, y: ROOM.d - 1.0, label: 'pos.8', isOpt: true },
+            { x: 1.0, y: 1.0, label: 'pos.9', isOpt: true },
         ];
         for (const pt of pts) {
             if (pt.skip) continue;
@@ -67,9 +72,9 @@ const FloorRenderer = (function() {
                 ctx.strokeStyle = 'rgba(78,195,247,.15)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
             }
             ctx.beginPath(); ctx.arc(px, py, pt.isR ? 8 : 4, 0, Math.PI * 2);
-            ctx.fillStyle = pt.isR ? 'rgba(255,167,38,.3)' : 'rgba(102,187,106,.2)'; ctx.fill();
+            ctx.fillStyle = pt.isR ? 'rgba(255,167,38,.3)' : pt.isOpt ? 'rgba(79,195,247,.15)' : 'rgba(102,187,106,.2)'; ctx.fill();
             ctx.beginPath(); ctx.arc(px, py, pt.isR ? 4 : 2.5, 0, Math.PI * 2);
-            ctx.fillStyle = pt.isR ? '#ffa726' : '#66bb6a'; ctx.fill();
+            ctx.fillStyle = pt.isR ? '#ffa726' : pt.isOpt ? '#4fc3f7' : '#66bb6a'; ctx.fill();
             ctx.font = '8px Meiryo'; ctx.fillStyle = '#8a9ab0'; ctx.textAlign = 'center'; ctx.fillText(pt.label, px, py + 14);
         }
     }

@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - CSIデータモデル
 (RF PROBE v2.0 CSIFrame を継承 + RuView Scan 固有のモデルを追加)
 """
@@ -18,7 +18,7 @@ class CSIFrame:
     source_mac: str                     # 送信元MACアドレス
     channel: int                        # Wi-Fiチャネル番号
     bandwidth: int                      # MHz (20, 40, 80, 160)
-    frequency_band: str                 # '2.4GHz' or '5GHz'
+    frequency_band: str                 # '2.4GHz', '5GHz', or '5GHz_160'
     rssi: float                         # dBm
     noise_floor: float                  # dBm
     n_subcarriers: int                  # サブキャリア数
@@ -69,18 +69,20 @@ class DualBandCapture:
     position: Tuple[float, float, float]  # 推定位置 (x, y, z) メートル
     frames_24ghz: List[CSIFrame] = field(default_factory=list)  # 2.4GHz フレーム
     frames_5ghz: List[CSIFrame] = field(default_factory=list)   # 5GHz フレーム
+    frames_160mhz: List[CSIFrame] = field(default_factory=list)  # 5GHz 160MHz フレーム
     capture_time: Optional[datetime] = None
     duration_24: float = 0.0    # 秒
     duration_5: float = 0.0     # 秒
+    duration_160: float = 0.0   # 秒
 
     @property
     def is_complete(self) -> bool:
-        """2バンドとも取得済みか"""
+        """必須2バンド(2.4GHz+5GHz)が取得済みか (160MHzはオプション)"""
         return len(self.frames_24ghz) > 0 and len(self.frames_5ghz) > 0
 
     @property
     def total_frames(self) -> int:
-        return len(self.frames_24ghz) + len(self.frames_5ghz)
+        return len(self.frames_24ghz) + len(self.frames_5ghz) + len(self.frames_160mhz)
 
 
 @dataclass
@@ -96,15 +98,12 @@ class ScanSession:
     def completed_points(self) -> List[str]:
         return [pid for pid, cap in self.captures.items() if cap.is_complete]
 
-    @property
-    def is_complete(self) -> bool:
-        required = {'north', 'east', 'south', 'west', 'center'}
-        return required.issubset(set(self.completed_points))
+
 
     @property
     def progress(self) -> float:
-        """完了率 0.0 ~ 1.0"""
-        return len(self.completed_points) / 5.0
+        """完了率 0.0 ~ 1.0 (必須5点 + オプション4点 = 最大9点)"""
+        return len(self.completed_points) / 9.0
 
 
 class ScanProgressDTO(BaseModel):

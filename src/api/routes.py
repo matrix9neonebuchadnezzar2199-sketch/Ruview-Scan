@@ -248,7 +248,11 @@ async def build_result(
 
             rmap_gen = ReflectionMapGenerator(state.room_dims)
             maps = rmap_gen.generate(session)
-            state.reflection_maps = maps
+            # face_band キーでキャッシュ保存 (Phase D)
+            state.reflection_maps = {}
+            for face_key, rmap in maps.items():
+                state.reflection_maps[face_key] = rmap                    # 後方互換: faceキー
+                state.reflection_maps[f"{face_key}_mix"] = rmap          # band付きキー
 
             # 3. 構造物検出 (Phase B)
             from src.scan.structure_detector import StructureDetector
@@ -322,18 +326,43 @@ async def get_room():
 
 @router.get("/result/map/{face}/{band}")
 async def get_reflection_map(face: str, band: str):
-    """反射マップを返す"""
-    if state.reflection_maps is None:
-        raise HTTPException(404, detail="Reflection maps not generated yet")
+    """反射マップを返す (Phase D: 160MHz対応、オンデマンド生成)"""
+    valid_faces = {'floor', 'ceiling', 'north', 'south', 'east', 'west'}
+    valid_bands = {'mix', '24', '5', '160'}
+    if face not in valid_faces:
+        raise HTTPException(400, detail=f"Invalid face: {face}. Valid: {valid_faces}")
+    if band not in valid_bands:
+        raise HTTPException(400, detail=f"Invalid band: {band}. Valid: {valid_bands}")
 
-    key = f"{face}_{band}"
-    if key not in state.reflection_maps:
-        # フォールバック: face名だけで検索
-        rmap = state.reflection_maps.get(face)
+    if state.reflection_maps is None:
+        raise HTTPException(404, detail="Reflection maps not generated yet. Run /api/build first.")
+
+    # キャッシュキー: "face_band" (例: "floor_160")
+    cache_key = f"{face}_{band}"
+
+    if cache_key not in state.reflection_maps:
+        # フォールバック: band='mix' のキーまたは face 単体キーを探す
+        rmap = state.reflection_maps.get(f"{face}_mix") or state.reflection_maps.get(face)
+
+        # それでもなく、かつ別バンドが要求された場合はオンデマンド生成
+        if rmap is None or band != 'mix':
+            try:
+                from src.scan.reflection_map import ReflectionMapGenerator
+                session = state.scan_manager.current_session if state.scan_manager else None
+                if session and state.room_dims:
+                    rmap_gen = ReflectionMapGenerator(state.room_dims)
+                    band_maps = rmap_gen.generate(session, band=band)
+                    # 生成結果をキャッシュに保存
+                    for f, m in band_maps.items():
+                        state.reflection_maps[f"{f}_{band}"] = m
+                    rmap = band_maps.get(face)
+            except Exception as e:
+                logger.error(f"On-demand map generation failed: {e}")
+
         if rmap is None:
             raise HTTPException(404, detail=f"Map not found: {face}/{band}")
     else:
-        rmap = state.reflection_maps[key]
+        rmap = state.reflection_maps[cache_key]
 
     return {
         "face": rmap.face,

@@ -1,4 +1,4 @@
-app:
+﻿app:
   name: "RuView Scan"
   version: "1.0.0"
 
@@ -23,6 +23,23 @@ measurement:
     - id: center
       label: "中心 (pos.5)"
       description: "ノートPCを部屋中央に配置"
+    # Phase D: 追加測定点 (オプション - カバレッジ改善用)
+    - id: northeast
+      label: "北東角 (pos.6)"
+      description: "ノートPCを北東角から1mの位置に配置"
+      optional: true
+    - id: southeast
+      label: "南東角 (pos.7)"
+      description: "ノートPCを南東角から1mの位置に配置"
+      optional: true
+    - id: southwest
+      label: "南西角 (pos.8)"
+      description: "ノートPCを南西角から1mの位置に配置"
+      optional: true
+    - id: northwest
+      label: "北西角 (pos.9)"
+      description: "ノートPCを北西角から1mの位置に配置"
+      optional: true
 
   duration_per_band: 30        # 秒（1バンドあたり）
   bands:
@@ -34,6 +51,10 @@ measurement:
       channel: 36
       bandwidth: 80            # MHz
       subcarriers: 234
+    - frequency: 5GHz_160
+      channel: 36
+      bandwidth: 160           # MHz
+      subcarriers: 468
   sample_rate: 100             # Hz
 
 csi:

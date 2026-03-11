@@ -89,6 +89,7 @@ body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI','Meiryo',sans-serif
 .scan-point .sp-progress .sp-fill{height:100%;border-radius:2px;width:0%;transition:width .3s}
 .scan-point .sp-fill-24{background:linear-gradient(90deg,#ffa726,#ff7043)}
 .scan-point .sp-fill-5{background:linear-gradient(90deg,#4fc3f7,#00e676)}
+.scan-point .sp-fill-160{background:linear-gradient(90deg,#ce93d8,#ab47bc)}
 .scan-point .sp-status{font-size:9px;color:#5a6a7a;margin-top:2px}
 .scan-point .sp-status.active-status{color:#4fc3f7}
 .scan-point .sp-status.done-status{color:#4caf50}

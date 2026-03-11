@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - DualBandCollector
 ===============================
 2.4GHz→5GHz 逐次チャネル切替によるCSI収集
@@ -89,6 +89,19 @@ class DualBandCollector:
         )
         capture.duration_5 = self.duration_per_band
         logger.info(f"[{point_id}] 5GHz完了: {len(capture.frames_5ghz)}フレーム")
+
+        # === 5GHz 160MHz Phase ===
+        logger.info(f"[{point_id}] 5GHz 160MHz CSI取得開始")
+        if self._is_simulated:
+            self.adapter.configure(channel=36, bandwidth=160, num_subcarriers=468)
+
+        capture.frames_160mhz = await self._collect_band(
+            band='5GHz_160',
+            point_id=point_id,
+            progress_callback=progress_callback
+        )
+        capture.duration_160 = self.duration_per_band
+        logger.info(f"[{point_id}] 5GHz 160MHz完了: {len(capture.frames_160mhz)}フレーム")
 
         return capture
 

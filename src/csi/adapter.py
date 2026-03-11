@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - CSI入力アダプタ
 ================================
 PicoScenes, シミュレーションの各ソースからCSIを統一形式で取得する
@@ -150,7 +150,13 @@ class PicoScenesAdapter(CSIAdapter):
             raise CSIParseError(f"CSI配列再構成失敗: {e}")
 
         # 周波数帯を判定
-        freq_band = '2.4GHz' if channel <= 14 else '5GHz'
+        bandwidth = obj.get('bandwidth', 20)
+        if channel <= 14:
+            freq_band = '2.4GHz'
+        elif bandwidth >= 160:
+            freq_band = '5GHz_160'
+        else:
+            freq_band = '5GHz'
 
         return CSIFrame(
             timestamp=obj.get("timestamp", time.time()),
@@ -219,6 +225,11 @@ class SimulatedAdapter(CSIAdapter):
             'south':  (w / 2, d - 1.0, mh),
             'west':   (1.0, d / 2, mh),
             'center': (w / 2, d / 2, mh),
+            # Phase D: 4隅の追加測定点
+            'northeast': (w - 1.0, 1.0, mh),
+            'southeast': (w - 1.0, d - 1.0, mh),
+            'southwest': (1.0, d - 1.0, mh),
+            'northwest': (1.0, 1.0, mh),
         }
         return positions.get(point_id, (w / 2, d / 2, mh))
 
@@ -232,7 +243,12 @@ class SimulatedAdapter(CSIAdapter):
     async def connect(self) -> None:
         self._connected = True
         self._frame_count = 0
-        freq_band = '2.4GHz' if self.channel <= 14 else '5GHz'
+        if self.channel <= 14:
+            freq_band = '2.4GHz'
+        elif self.bandwidth >= 160:
+            freq_band = '5GHz_160'
+        else:
+            freq_band = '5GHz'
         logger.info(
             f"シミュレーションCSI起動: "
             f"{freq_band} ch{self.channel} {self.bandwidth}MHz "
@@ -350,7 +366,12 @@ class SimulatedAdapter(CSIAdapter):
             amplitude[:, stream] = np.abs(h)
             phase[:, stream] = np.angle(h)
 
-        freq_band = '2.4GHz' if self.channel <= 14 else '5GHz'
+        if self.channel <= 14:
+            freq_band = '2.4GHz'
+        elif self.bandwidth >= 160:
+            freq_band = '5GHz_160'
+        else:
+            freq_band = '5GHz'
 
         return CSIFrame(
             timestamp=time.time(),

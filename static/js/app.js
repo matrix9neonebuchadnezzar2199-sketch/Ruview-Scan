@@ -289,8 +289,13 @@ const RuView = (function() {
 
         // View label
         mainCtx.font = '14px Meiryo'; mainCtx.fillStyle = '#4fc3f7'; mainCtx.textAlign = 'left';
-        var freqLabel = currentFreq === 'mix' ? '2.4+5GHz' : currentFreq === '24' ? '2.4GHz' : '5GHz';
+        var freqLabel = currentFreq === 'mix' ? '2.4+5+160MHz' : currentFreq === '24' ? '2.4GHz' : currentFreq === '5' ? '5GHz(80MHz)' : '5GHz(160MHz)';
         mainCtx.fillText('◆ ' + vd.label + ' (' + freqLabel + ')', 10, 22);
+
+        // 床面は常に測定点を表示（スキャン前でもポジションを可視化）
+        if (currentView === 'floor') {
+            FloorRenderer.drawMeasurementPoints(mainCtx, ROOM, tx, ty);
+        }
 
         if (!scanned) {
             mainCtx.font = '16px Meiryo'; mainCtx.fillStyle = '#3a4a6a'; mainCtx.textAlign = 'center';
@@ -403,7 +408,7 @@ const RuView = (function() {
                 addLog('  反射マップ取得開始...', 'log-info');
                 try {
                     var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-                    var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : 'mix';
+                    var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
                     var loaded = 0;
                     for (var i = 0; i < faces.length; i++) {
                         var face = faces[i];
@@ -438,7 +443,7 @@ const RuView = (function() {
     }
 
     async function _fetchGridForCurrentView() {
-        var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : 'mix';
+        var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
         try {
             var resp = await fetch(API + '/result/map/' + currentView + '/' + bandParam);
             if (resp.ok) {
