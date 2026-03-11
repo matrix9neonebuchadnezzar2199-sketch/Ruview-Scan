@@ -30,6 +30,7 @@
       <div class="tab-btn" data-view="south" onclick="RuView.switchView('south')">▼ 南壁<span class="badge hidden" id="badge-south"></span></div>
       <div class="tab-btn" data-view="east" onclick="RuView.switchView('east')">▶ 東壁<span class="badge hidden" id="badge-east"></span></div>
       <div class="tab-btn" data-view="west" onclick="RuView.switchView('west')">◀ 西壁<span class="badge hidden" id="badge-west"></span></div>
+      <div class="tab-btn" data-view="3d" onclick="RuView.switchView('3d')">🧊 3D</div>
     </div>
     <div class="controls-row">
       <div class="filter-bar">
@@ -77,6 +78,7 @@
     </div>
     <div class="canvas-container">
       <canvas id="mainCanvas"></canvas>
+      <div id="three3dContainer" style="width:100%;height:100%;position:absolute;top:0;left:0;display:none"></div>
       <div class="hover-tooltip hidden" id="hoverTooltip"></div>
     </div>
   </div>
@@ -153,7 +155,10 @@
 <script src="/static/js/scan_control.js"></script>
 <script src="/static/js/heatmap_renderer.js"></script>
 <script src="/static/js/floor_renderer.js"></script>
+<script src="/static/js/lib/three.min.js"></script>
+<script src="/static/js/lib/OrbitControls.js"></script>
 <script src="/static/js/room3d.js"></script>
+<script src="/static/js/room3d_three.js"></script>
 <script src="/static/js/audio.js"></script>
 <script src="/static/js/app.js"></script>
 

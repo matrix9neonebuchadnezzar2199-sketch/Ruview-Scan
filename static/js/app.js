@@ -51,6 +51,8 @@ const RuView = (function() {
     let lastDrawParams = { offX:0, offY:0, drawW:0, drawH:0, scale:1 };
 
     let mainCanvas, mainCtx, room3dCanvas;
+    let is3DMode = false;
+    let three3dInitialized = false;
 
     /** Init */
     function init() {
@@ -88,8 +90,32 @@ const RuView = (function() {
         document.querySelectorAll('.tab-btn').forEach(function(b) {
             b.classList.toggle('active', b.dataset.view === view);
         });
-        _restoreSliderState();
-        render();
+
+        var canvas2d = document.getElementById('mainCanvas');
+        var container3d = document.getElementById('three3dContainer');
+
+        if (view === '3d') {
+            is3DMode = true;
+            canvas2d.style.display = 'none';
+            container3d.style.display = 'block';
+
+            if (!three3dInitialized) {
+                Room3DView.init('three3dContainer');
+                Room3DView.buildRoom(ROOM);
+                three3dInitialized = true;
+            } else {
+                Room3DView.onResize();
+            }
+            Room3DView.startAnimation();
+            _update3DTextures();
+        } else {
+            is3DMode = false;
+            canvas2d.style.display = 'block';
+            container3d.style.display = 'none';
+            Room3DView.stopAnimation();
+            _restoreSliderState();
+            render();
+        }
     }
 
     /** Filter toggle */
@@ -98,7 +124,15 @@ const RuView = (function() {
         document.querySelectorAll('.filter-btn').forEach(function(b) {
             if (b.dataset.filter === key) b.classList.toggle('on', filters[key]);
         });
-        render();
+        if (is3DMode) {
+            console.log('3D structures update:', 'infra=' + filters.infra, 'foreign=' + filters.foreign);
+        var totalP = 0, totalF = 0;
+        for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
+        console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
+        Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign);
+        } else {
+            render();
+        }
     }
 
     /** Frequency switch */
@@ -117,7 +151,7 @@ const RuView = (function() {
         document.querySelectorAll('.cmap-btn').forEach(function(b) {
             b.classList.toggle('active', b.dataset.cmap === cmapId);
         });
-        render();
+        if (is3DMode) { _update3DTextures(); } else { render(); }
     }
 
     /** Depth slider change */
@@ -134,9 +168,11 @@ const RuView = (function() {
 
         document.getElementById('sliderLowerVal').textContent = lower.toFixed(2);
         document.getElementById('sliderUpperVal').textContent = upper.toFixed(2);
-        SLIDER_STATE[currentView].lower = lower;
-        SLIDER_STATE[currentView].upper = upper;
-        render();
+        if (SLIDER_STATE[currentView]) {
+            SLIDER_STATE[currentView].lower = lower;
+            SLIDER_STATE[currentView].upper = upper;
+        }
+        if (is3DMode) { _update3DTextures(); } else { render(); }
     }
 
     /** Opacity slider change */
@@ -144,7 +180,7 @@ const RuView = (function() {
         var val = parseInt(document.getElementById('sliderOpacity').value);
         heatmapOpacity = val / 100;
         document.getElementById('sliderOpacityVal').textContent = val + '%';
-        render();
+        if (is3DMode) { _update3DTextures(); } else { render(); }
     }
 
     /** Preset apply */
@@ -183,16 +219,19 @@ const RuView = (function() {
         SLIDER_STATE[currentView].lower = lower;
         SLIDER_STATE[currentView].upper = upper;
         _restoreSliderState();
+        if (is3DMode) { _update3DTextures(); }
         addLog('自動プリセット: peak=' + peak.toFixed(2) + ' → [' + lower.toFixed(2) + ', ' + upper.toFixed(2) + ']', 'log-info');
         render();
     }
 
     function _saveSliderState() {
+        if (!SLIDER_STATE[currentView]) return;
         SLIDER_STATE[currentView].lower = parseInt(document.getElementById('sliderLower').value) / 100;
         SLIDER_STATE[currentView].upper = parseInt(document.getElementById('sliderUpper').value) / 100;
     }
 
     function _restoreSliderState() {
+        if (!SLIDER_STATE[currentView]) return;
         var state = SLIDER_STATE[currentView];
         document.getElementById('sliderLower').value = Math.floor(state.lower * 100);
         document.getElementById('sliderUpper').value = Math.floor(state.upper * 100);
@@ -243,6 +282,19 @@ const RuView = (function() {
 
     function _onCanvasMouseLeave() {
         document.getElementById('hoverTooltip').classList.add('hidden');
+    }
+
+    /** Update 3D textures with current slider/colormap settings */
+    function _update3DTextures() {
+        if (!three3dInitialized || !scanned) return;
+        var lower = parseInt(document.getElementById('sliderLower').value) / 100;
+        var upper = parseInt(document.getElementById('sliderUpper').value) / 100;
+        Room3DView.updateAllFaces(GRID_DATA, lower, upper, currentColorMap, heatmapOpacity);
+        console.log('3D structures update:', 'infra=' + filters.infra, 'foreign=' + filters.foreign);
+        var totalP = 0, totalF = 0;
+        for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
+        console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
+        Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign);
     }
 
     /** Render main canvas */
@@ -423,6 +475,8 @@ const RuView = (function() {
                         }
                     }
                     addLog('  反射マップ取得: ' + loaded + '/6面', loaded === 6 ? 'log-info' : 'log-warn');
+                    // 3Dテクスチャ更新
+                    if (three3dInitialized) { _update3DTextures(); }
                 } catch(gridErr) {
                     addLog('  Grid取得エラー: ' + gridErr.message, 'log-warn');
                 }
@@ -500,6 +554,11 @@ const RuView = (function() {
         updateInfoPanel(totalPipes, totalForeign);
         updateForeignAlert();
         render();
+        // 3Dビュー用: ルーム構築
+        if (three3dInitialized) {
+            Room3DView.buildRoom(ROOM);
+            _update3DTextures();
+        }
         addLog('=== 3D化完了 (シミュレーション) ===', 'log-info');
     }
 
@@ -559,6 +618,12 @@ const RuView = (function() {
         updateForeignAlert();
         updateBadges();
         render();
+
+        // 3Dビュー用: ルーム構築
+        if (three3dInitialized) {
+            Room3DView.buildRoom(ROOM);
+            _update3DTextures();
+        }
     }
 
     function updateInfoPanel(totalPipes, totalForeign) {
@@ -747,6 +812,15 @@ const RuView = (function() {
         document.getElementById('btnConfirmRoom').textContent = '寸法を確定';
 
         document.getElementById('hoverTooltip').classList.add('hidden');
+
+        // 3Dリセット
+        if (three3dInitialized) {
+            Room3DView.buildRoom(ROOM);
+        }
+        is3DMode = false;
+        document.getElementById('mainCanvas').style.display = 'block';
+        document.getElementById('three3dContainer').style.display = 'none';
+        Room3DView.stopAnimation();
 
         ScanControl.resetPoints();
         render();

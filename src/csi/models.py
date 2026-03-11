@@ -98,7 +98,10 @@ class ScanSession:
     def completed_points(self) -> List[str]:
         return [pid for pid, cap in self.captures.items() if cap.is_complete]
 
-
+    @property
+    def is_complete(self) -> bool:
+        required = {'north', 'east', 'south', 'west', 'center'}
+        return required.issubset(set(self.completed_points))
 
     @property
     def progress(self) -> float:
