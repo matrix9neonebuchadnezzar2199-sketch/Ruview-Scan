@@ -1,5 +1,6 @@
-"""
+﻿"""
 RuView Scan - RFスキャナー (RF PROBEから移植)
+Phase C: シミュレーション異物シナリオ追加
 """
 
 import asyncio
@@ -55,8 +56,7 @@ class RFScanner:
             return devices
 
         except FileNotFoundError:
-            logger.warning("iw コマンドが見つかりません (Windows?)")
-            # シミュレーション: ダミーデバイスを返す
+            logger.warning("iw コマンドが見つかりません — シミュレーションモード")
             return self._simulate_scan()
         except asyncio.TimeoutError:
             raise RFScanError("RFスキャンがタイムアウトしました")
@@ -136,36 +136,69 @@ class RFScanner:
 
     def _freq_to_channel(self, freq: int) -> int:
         """周波数(MHz)からチャネル番号を計算"""
-        # 2.4 GHz 帯
         if 2412 <= freq <= 2484:
             if freq == 2484:
                 return 14
             return (freq - 2412) // 5 + 1
-        # 5 GHz 帯: ch36-64 (5180-5320)
         elif 5180 <= freq <= 5320:
             return (freq - 5180) // 5 + 36
-        # 5 GHz 帯: ch100-144 (5500-5720)
         elif 5500 <= freq <= 5720:
             return (freq - 5500) // 5 + 100
-        # 5 GHz 帯: ch149-165 (5745-5825)
         elif 5745 <= freq <= 5825:
             return (freq - 5745) // 5 + 149
-        # フォールバック
         elif freq < 5000:
             return max(1, (freq - 2412) // 5 + 1)
         else:
             return max(36, (freq - 5180) // 5 + 36)
 
     def _simulate_scan(self) -> List[RFDevice]:
-        """シミュレーション用のダミースキャン結果"""
+        """シミュレーション用スキャン結果 — 正常AP + 不審デバイス"""
+        logger.info("RFシミュレーションスキャン実行")
         self._last_devices = [
-            RFDevice("AA:BB:CC:DD:EE:01", "自社Wi-Fi", 1, -45.0,
-                     "2.4GHz", True, False),
-            RFDevice("AA:BB:CC:DD:EE:02", "自社Wi-Fi_5G", 36, -50.0,
-                     "5GHz", True, False),
-            RFDevice("11:22:33:44:55:66", None, 6, -35.0,
-                     "2.4GHz", False, True, "隠しSSID"),
+            # --- 正常なAP ---
+            RFDevice(
+                bssid="AA:BB:CC:DD:EE:01",
+                ssid="HomeWiFi",
+                channel=1, signal=-45.0,
+                frequency="2.4GHz",
+                is_known=True, is_suspicious=False,
+            ),
+            RFDevice(
+                bssid="AA:BB:CC:DD:EE:02",
+                ssid="HomeWiFi_5G",
+                channel=36, signal=-50.0,
+                frequency="5GHz",
+                is_known=True, is_suspicious=False,
+            ),
+            # --- 隣室のAP (正常だが未知) ---
+            RFDevice(
+                bssid="BB:CC:DD:EE:FF:01",
+                ssid="Neighbor_AP",
+                channel=11, signal=-72.0,
+                frequency="2.4GHz",
+                is_known=False, is_suspicious=False,
+            ),
+            # --- 不審デバイス 1: 隠しSSID (壁内盗聴器疑い) ---
+            RFDevice(
+                bssid="11:22:33:44:55:66",
+                ssid=None,
+                channel=6, signal=-28.0,
+                frequency="2.4GHz",
+                is_known=False, is_suspicious=True,
+                suspicion_reason="隠しSSID + 異常に強い信号 (-28dBm)",
+            ),
+            # --- 不審デバイス 2: 未知AP 強信号 (隠しカメラ疑い) ---
+            RFDevice(
+                bssid="66:77:88:99:AA:BB",
+                ssid="ESP_CAM_01",
+                channel=1, signal=-15.0,
+                frequency="2.4GHz",
+                is_known=False, is_suspicious=True,
+                suspicion_reason="異常に強い信号 (-15dBm) / IoTデバイス",
+            ),
         ]
+        logger.info(f"RF検出: {len(self._last_devices)}台 "
+                    f"(不審: {sum(1 for d in self._last_devices if d.is_suspicious)}台)")
         return self._last_devices
 
     def get_suspicious_devices(self) -> List[RFDevice]:

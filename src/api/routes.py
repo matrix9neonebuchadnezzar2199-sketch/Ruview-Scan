@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - REST API エンドポイント
 """
 
@@ -83,6 +83,7 @@ class ForeignResponse(BaseModel):
     label: str
     detail: str
     detection_method: str
+    threat_level: str = "medium"
 
 
 # ===== Endpoints =====
@@ -287,6 +288,7 @@ async def build_result(
                         "radius": f.radius, "confidence": f.confidence,
                         "label": f.label, "detail": f.detail,
                         "detection_method": f.detection_method,
+                        "threat_level": f.threat_level,
                     }
                     for f in foreign
                 ]
@@ -373,6 +375,7 @@ async def get_foreign():
                 "radius": f.radius, "confidence": f.confidence,
                 "label": f.label, "detail": f.detail,
                 "detection_method": f.detection_method,
+                "threat_level": f.threat_level,
             }
             for f in state.foreign_objects
         ]
@@ -389,3 +392,4 @@ async def reset():
     state.structures = None
     state.foreign_objects = None
     return {"status": "reset"}
+

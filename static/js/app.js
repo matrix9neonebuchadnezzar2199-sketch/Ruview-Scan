@@ -65,6 +65,9 @@ const RuView = (function() {
         mainCanvas.addEventListener('mouseleave', _onCanvasMouseLeave);
 
         render();
+        // foreignAlert クリックでモーダルを開く
+        var fa = document.getElementById('foreignAlert');
+        if (fa) fa.addEventListener('click', function(){ openForeignModal(); });
         addLog('RuView Scan v1.1 起動', 'log-info');
         addLog('モバイルWi-Fiルーターを部屋中心に設置してください', 'log-info');
     }
@@ -566,22 +569,54 @@ const RuView = (function() {
         var alertEl = document.getElementById('foreignAlert');
         var listEl = document.getElementById('foreignList');
         var faceNames = {floor:'床下',ceiling:'天井裏',north:'北壁内',south:'南壁内',east:'東壁内',west:'西壁内'};
+        var threatColors = {high:'#ff1744',medium:'#ff9100',low:'#ffd600',none:'#66bb6a'};
+        var threatLabels = {high:'危険',medium:'警戒',low:'注意',none:'安全'};
+        var methodLabels = {rf:'RF検出',csi:'CSI残差',both:'RF+CSI統合',unknown:'不明'};
 
         var allForeign = [];
         for (var f in VIEW_DATA) {
             for (var i = 0; i < VIEW_DATA[f].foreign.length; i++) {
                 var fo = VIEW_DATA[f].foreign[i];
-                allForeign.push({ x:fo.x, y:fo.y, label:fo.label, detail:fo.detail, face:f });
+                allForeign.push({
+                    x:fo.x, y:fo.y, label:fo.label, detail:fo.detail, face:f,
+                    threat_level: fo.threat_level || 'medium',
+                    detection_method: fo.detection_method || 'unknown',
+                    dispConf: fo.dispConf || 0
+                });
             }
         }
+
+        // 脅威レベルでソート (high → medium → low → none)
+        var threatOrder = {high:0, medium:1, low:2, none:3};
+        allForeign.sort(function(a, b) {
+            return (threatOrder[a.threat_level]||2) - (threatOrder[b.threat_level]||2);
+        });
 
         if (allForeign.length > 0) {
             alertEl.classList.add('show');
             listEl.innerHTML = allForeign.map(function(fo) {
-                return '<div class="item">⚠ ' + (faceNames[fo.face]||fo.face) + ' (' + fo.x.toFixed(1) + ',' + fo.y.toFixed(1) + ')m — ' + fo.label + '<br><span style="font-size:8px;color:#888">' + fo.detail + '</span></div>';
+                var tc = threatColors[fo.threat_level] || '#ff9100';
+                var tl = threatLabels[fo.threat_level] || '警戒';
+                var ml = methodLabels[fo.detection_method] || '不明';
+                return '<div class="foreign-item" style="border-left:3px solid ' + tc + ';padding:4px 8px;margin:3px 0;background:rgba(0,0,0,0.2);border-radius:4px">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<span style="color:' + tc + ';font-weight:bold;font-size:11px">⚠ ' + tl + '</span>' +
+                    '<span style="font-size:8px;color:#888;background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:3px">' + ml + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:10px;color:#ddd;margin-top:2px">' +
+                    (faceNames[fo.face]||fo.face) + ' (' + fo.x.toFixed(1) + ', ' + fo.y.toFixed(1) + ')m — ' + fo.label +
+                    '</div>' +
+                    '<div style="font-size:8px;color:#888;margin-top:1px">' +
+                    '信頼度: ' + (fo.dispConf * 100).toFixed(0) + '% | ' + fo.detail +
+                    '</div>' +
+                    '</div>';
             }).join('');
             AudioAlert.playAlert();
-            addLog('★★★ 異物検出アラート: ' + allForeign.length + '個 ★★★', 'log-foreign');
+
+            // 脅威レベル別カウントをログに表示
+            var highCount = allForeign.filter(function(f){return f.threat_level==='high'}).length;
+            var medCount = allForeign.filter(function(f){return f.threat_level==='medium'}).length;
+            addLog('★★★ 異物検出アラート: ' + allForeign.length + '個 (危険:' + highCount + ' / 警戒:' + medCount + ') ★★★', 'log-foreign');
         } else {
             alertEl.classList.remove('show');
         }
@@ -596,6 +631,79 @@ const RuView = (function() {
                 else { badge.classList.add('hidden'); }
             }
         }
+    }
+
+    /** Foreign modal */
+    function openForeignModal() {
+        var modal = document.getElementById('foreignModal');
+        var body = document.getElementById('foreignModalBody');
+        var faceNames = {floor:'床下',ceiling:'天井裏',north:'北壁内',south:'南壁内',east:'東壁内',west:'西壁内'};
+        var threatColors = {high:'#ff1744',medium:'#ff9100',low:'#ffd600'};
+        var threatLabels = {high:'危険',medium:'警戒',low:'注意'};
+        var methodLabels = {rf:'RF検出',csi:'CSI残差検出',both:'RF+CSI統合検出',unknown:'不明'};
+
+        var allForeign = [];
+        for (var f in VIEW_DATA) {
+            for (var i = 0; i < VIEW_DATA[f].foreign.length; i++) {
+                var fo = VIEW_DATA[f].foreign[i];
+                allForeign.push({
+                    x:fo.x, y:fo.y, r:fo.r, label:fo.label, detail:fo.detail, face:f,
+                    threat_level: fo.threat_level || 'medium',
+                    detection_method: fo.detection_method || 'unknown',
+                    dispConf: fo.dispConf || 0
+                });
+            }
+        }
+
+        var threatOrder = {high:0, medium:1, low:2, none:3};
+        allForeign.sort(function(a,b){ return (threatOrder[a.threat_level]||2) - (threatOrder[b.threat_level]||2); });
+
+        if (allForeign.length === 0) {
+            body.innerHTML = '<div style="text-align:center;color:#6a7a8a;padding:40px;font-size:14px">不審デバイスは検出されていません</div>';
+            modal.classList.remove('hidden');
+            return;
+        }
+
+        // サマリー
+        var highC = allForeign.filter(function(f){return f.threat_level==='high'}).length;
+        var medC = allForeign.filter(function(f){return f.threat_level==='medium'}).length;
+        var lowC = allForeign.filter(function(f){return f.threat_level==='low'}).length;
+
+        var html = '<div class="fm-summary">';
+        html += '<div class="fm-summary-item"><strong style="color:#eee;font-size:14px">' + allForeign.length + ' 件検出</strong></div>';
+        if (highC > 0) html += '<div class="fm-summary-item"><span class="fm-summary-dot" style="background:#ff1744"></span>危険 ' + highC + '</div>';
+        if (medC > 0) html += '<div class="fm-summary-item"><span class="fm-summary-dot" style="background:#ff9100"></span>警戒 ' + medC + '</div>';
+        if (lowC > 0) html += '<div class="fm-summary-item"><span class="fm-summary-dot" style="background:#ffd600"></span>注意 ' + lowC + '</div>';
+        html += '</div>';
+
+        for (var j = 0; j < allForeign.length; j++) {
+            var fo = allForeign[j];
+            var tl = fo.threat_level || 'medium';
+            var tc = threatColors[tl] || '#ff9100';
+            var tlLabel = threatLabels[tl] || '警戒';
+            var ml = methodLabels[fo.detection_method] || '不明';
+            var faceName = faceNames[fo.face] || fo.face;
+
+            html += '<div class="fm-item threat-' + tl + '">';
+            html += '<div class="fm-item-header">';
+            html += '<span class="fm-threat-badge ' + tl + '">' + tlLabel + '</span>';
+            html += '<span class="fm-method-badge">' + ml + '</span>';
+            html += '</div>';
+            html += '<div class="fm-label">' + fo.label + '</div>';
+            html += '<div class="fm-location">📍 ' + faceName + ' (' + fo.x.toFixed(2) + ', ' + fo.y.toFixed(2) + ')m';
+            if (fo.r > 0) html += ' / 推定サイズ: ' + (fo.r * 100).toFixed(0) + 'cm';
+            html += '</div>';
+            html += '<div class="fm-detail">' + fo.detail + '</div>';
+            html += '<span class="fm-confidence">信頼度: ' + (fo.dispConf * 100).toFixed(0) + '%</span>';
+            html += '</div>';
+        }
+
+        body.innerHTML = html;
+        modal.classList.remove('hidden');
+    }
+
+    function closeForeignModal() {
+        document.getElementById('foreignModal').classList.add('hidden');
     }
 
     /** Reset */
@@ -658,9 +766,13 @@ const RuView = (function() {
         switchView: switchView, toggleFilter: toggleFilter, switchFreq: switchFreq,
         switchColorMap: switchColorMap, buildResult: buildResult, resetAll: resetAll,
         addLog: addLog, render: render, confirmRoom: confirmRoom, isRoomReady: isRoomReady,
-        onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset
+        onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset,
+        openForeignModal: openForeignModal, closeForeignModal: closeForeignModal
     };
 })();
+
+
+
 
 
 
