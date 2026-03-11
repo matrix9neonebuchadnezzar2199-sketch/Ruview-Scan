@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - 構造物検出 (配管・配線)
 """
 
@@ -76,10 +76,29 @@ class StructureDetector:
             row_min, col_min = coords.min(axis=0)
             row_max, col_max = coords.max(axis=0)
 
-            x1 = col_min * rmap.resolution
-            y1 = row_min * rmap.resolution
-            x2 = col_max * rmap.resolution
-            y2 = row_max * rmap.resolution
+            x1_raw = col_min * rmap.resolution
+            y1_raw = row_min * rmap.resolution
+            x2_raw = col_max * rmap.resolution
+            y2_raw = row_max * rmap.resolution
+
+            # 配管は水平か垂直に走る (建築基準)
+            # バウンディングボックスのアスペクト比で方向を判定
+            dx = x2_raw - x1_raw
+            dy = y2_raw - y1_raw
+            if dx >= dy:
+                # 横長 → 水平線 (y座標を中心に揃える)
+                y_center = (y1_raw + y2_raw) / 2
+                x1 = x1_raw
+                y1 = y_center
+                x2 = x2_raw
+                y2 = y_center
+            else:
+                # 縦長 → 垂直線 (x座標を中心に揃える)
+                x_center = (x1_raw + x2_raw) / 2
+                x1 = x_center
+                y1 = y1_raw
+                x2 = x_center
+                y2 = y2_raw
 
             # 長さチェック
             length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
@@ -173,3 +192,4 @@ class StructureDetector:
         mat_name = material_names.get(material, material)
         face_name = face_names.get(face, face)
         return f"{face_name}{mat_name}"
+

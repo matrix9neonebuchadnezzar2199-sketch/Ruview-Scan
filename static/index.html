@@ -31,28 +31,53 @@
       <div class="tab-btn" data-view="east" onclick="RuView.switchView('east')">▶ 東壁<span class="badge hidden" id="badge-east"></span></div>
       <div class="tab-btn" data-view="west" onclick="RuView.switchView('west')">◀ 西壁<span class="badge hidden" id="badge-west"></span></div>
     </div>
-    <div class="filter-bar">
-      <div class="filter-btn on" data-filter="infra" onclick="RuView.toggleFilter('infra')"><div class="dot" style="background:#4fc3f7"></div>配管・配線</div>
-      <div class="filter-btn on" data-filter="foreign" onclick="RuView.toggleFilter('foreign')"><div class="dot" style="background:#ff1744"></div>異物</div>
-      <div class="filter-btn on" data-filter="heatmap" onclick="RuView.toggleFilter('heatmap')"><div class="dot" style="background:rgba(150,100,200,.6)"></div>ヒートマップ</div>
+    <div class="controls-row">
+      <div class="filter-bar">
+        <div class="filter-btn" data-filter="infra" onclick="RuView.toggleFilter('infra')"><div class="dot" style="background:#4fc3f7"></div>配管・配線</div>
+        <div class="filter-btn on" data-filter="foreign" onclick="RuView.toggleFilter('foreign')"><div class="dot" style="background:#ff1744"></div>異物</div>
+        <div class="filter-btn on" data-filter="heatmap" onclick="RuView.toggleFilter('heatmap')"><div class="dot" style="background:rgba(150,100,200,.6)"></div>ヒートマップ</div>
+      </div>
+      <div class="sep"></div>
+      <div class="freq-bar">
+        <div class="freq-btn active" data-freq="mix" onclick="RuView.switchFreq('mix')">Mix</div>
+        <div class="freq-btn" data-freq="24" onclick="RuView.switchFreq('24')">2.4G</div>
+        <div class="freq-btn" data-freq="5" onclick="RuView.switchFreq('5')">5G</div>
+      </div>
+      <div class="sep"></div>
+      <div class="cmap-bar">
+        <div class="cmap-btn active" data-cmap="thermal" onclick="RuView.switchColorMap('thermal')">サーマル</div>
+        <div class="cmap-btn" data-cmap="heat" onclick="RuView.switchColorMap('heat')">ヒート</div>
+        <div class="cmap-btn" data-cmap="cool" onclick="RuView.switchColorMap('cool')">クール</div>
+        <div class="cmap-btn" data-cmap="grayscale" onclick="RuView.switchColorMap('grayscale')">グレー</div>
+        <div class="cmap-btn" data-cmap="rainbow" onclick="RuView.switchColorMap('rainbow')">虹</div>
+      </div>
+      <div class="sep"></div>
+      <div class="preset-bar">
+        <button class="preset-btn" onclick="RuView.applyPreset('all')">全表示</button>
+        <button class="preset-btn" onclick="RuView.applyPreset('surface')">壁表面</button>
+        <button class="preset-btn" onclick="RuView.applyPreset('shallow')">浅部</button>
+        <button class="preset-btn" onclick="RuView.applyPreset('deep')">深部</button>
+        <button class="preset-btn" onclick="RuView.applyPreset('auto')">自動</button>
+      </div>
     </div>
-    <div class="freq-bar" id="freqBar">
-      <div class="freq-btn active" data-freq="mix" onclick="RuView.switchFreq('mix')">ミックス (2.4+5GHz)</div>
-      <div class="freq-btn" data-freq="24" onclick="RuView.switchFreq('24')">2.4 GHz</div>
-      <div class="freq-btn" data-freq="5" onclick="RuView.switchFreq('5')">5 GHz</div>
-    </div>
-    <div class="slider-bar" id="sliderBar">
+    <div class="slider-row">
       <div class="slider-group">
-        <label class="slider-label">深度下限 <span id="sliderLowerVal">0.00</span></label>
+        <label class="slider-label">下限 <span id="sliderLowerVal">0.00</span></label>
         <input type="range" id="sliderLower" class="depth-slider" min="0" max="100" value="0" oninput="RuView.onSliderChange()">
       </div>
       <div class="slider-group">
-        <label class="slider-label">深度上限 <span id="sliderUpperVal">1.00</span></label>
+        <label class="slider-label">上限 <span id="sliderUpperVal">1.00</span></label>
         <input type="range" id="sliderUpper" class="depth-slider" min="0" max="100" value="100" oninput="RuView.onSliderChange()">
       </div>
-      <div class="slider-hint">◀ スライドで壁内の深度を調整</div>
+      <div class="slider-group slider-group-sm">
+        <label class="slider-label">不透明度 <span id="sliderOpacityVal">100%</span></label>
+        <input type="range" id="sliderOpacity" class="depth-slider opacity-slider" min="0" max="100" value="100" oninput="RuView.onOpacityChange()">
+      </div>
     </div>
-    <canvas id="mainCanvas"></canvas>
+    <div class="canvas-container">
+      <canvas id="mainCanvas"></canvas>
+      <div class="hover-tooltip hidden" id="hoverTooltip"></div>
+    </div>
   </div>
 
   <!-- CENTER: 3D view -->
@@ -132,3 +157,4 @@
 <script src="/static/js/app.js"></script>
 </body>
 </html>
+
