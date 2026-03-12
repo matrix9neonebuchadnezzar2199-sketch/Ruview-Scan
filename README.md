@@ -396,6 +396,171 @@ sudo bash ruview.sh
 
 ---
 
+## FeitCSI ベース完全再設計
+```
+アーキテクチャ
+ruview-scan/
+├── src/
+│   ├── main.py                          # エントリポイント（起動シーケンス統合）
+│   ├── setup/                           # ★ 環境自動構築モジュール
+│   │   ├── __init__.py
+│   │   ├── setup_state.py               # 構築状態管理（JSON永続化）
+│   │   ├── env_checker.py               # 環境スキャン（8項目）
+│   │   ├── offline_installer.py         # オフライン同梱パッケージのインストール
+│   │   ├── feitcsi_builder.py           # FeitCSI ソースビルド自動化
+│   │   ├── monitor_setup.py             # AX210 モニターモード自動起動
+│   │   └── boot_sequence.py             # 起動シーケンス統合制御
+│   ├── csi/
+│   │   ├── adapter.py                   # 既存（FeitCSI対応に改修）
+│   │   ├── feitcsi_bridge.py            # ★ FeitCSI UDP制御ブリッジ
+│   │   ├── feitcsi_parser.py            # ★ FeitCSI .dat パーサー
+│   │   └── ...（既存ファイル群）
+│   └── ...
+├── setup/                               # ★ オフライン同梱パッケージ
+│   ├── feitcsi/                          # FeitCSI ソースコード同梱
+│   │   ├── FeitCSI/                      # git clone 済みソース
+│   │   └── FeitCSI-iwlwifi/              # カスタムドライバソース
+│   ├── deb/                              # システム依存 deb パッケージ
+│   │   ├── linux-headers-generic*.deb    # ※カーネル版依存→起動時判定
+│   │   ├── build-essential*.deb
+│   │   ├── dkms*.deb
+│   │   ├── flex*.deb
+│   │   ├── libgtkmm-3.0-dev*.deb
+│   │   ├── libnl-genl-3-dev*.deb
+│   │   ├── libiw-dev*.deb
+│   │   ├── libpcap-dev*.deb
+│   │   ├── iw*.deb
+│   │   ├── wireless-tools*.deb
+│   │   └── rfkill*.deb
+│   ├── firmware/                         # AX210 ファームウェア
+│   │   └── iwlwifi-ty-a0-gf-a0-*.ucode
+│   ├── python_wheels/                    # Python依存パッケージ
+│   │   ├── fastapi-*.whl
+│   │   ├── uvicorn-*.whl
+│   │   ├── numpy-*.whl
+│   │   ├── scipy-*.whl
+│   │   └── ...
+│   └── download_packages.sh             # ★ 同梱パッケージ一括ダウンロードスクリプト
+├── config/
+│   ├── default.yaml                      # 既存
+│   └── setup_state.json                  # ★ 構築状態永続化
+└── scripts/
+    └── ...
+
+```
+依存関係の完全分類
+┌──────────────────────────────────────────────────────────────┐
+│  完全オフライン同梱（setup/ フォルダに配置）                   │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  [FeitCSI ソース]                                            │
+│    FeitCSI/           → git clone --recursive 済み           │
+│    FeitCSI-iwlwifi/   → git clone 済み                       │
+│    ※起動時にカーネルに合わせてビルド（make → make install）   │
+│    ※ビルド済みなら再ビルド不要（カーネル版で判定）           │
+│                                                              │
+│  [システム deb パッケージ]                                    │
+│    build-essential, dkms, flex, bison                        │
+│    libgtkmm-3.0-dev, libnl-genl-3-dev                       │
+│    libiw-dev, libpcap-dev                                    │
+│    iw, wireless-tools, rfkill                                │
+│                                                              │
+│  [ファームウェア]                                             │
+│    iwlwifi-ty-a0-gf-a0-*.ucode (AX210用)                    │
+│    iwlwifi-so-a0-gf-a0-*.ucode (AX201用、互換性のため)       │
+│                                                              │
+│  [Python wheels]                                              │
+│    fastapi, uvicorn, websockets, numpy, scipy, etc.          │
+│    CSIKit（FeitCSI .dat パーサーとして利用可能）               │
+│                                                              │
+│  [フロントエンド]                                             │
+│    Three.js, jsPDF, html2canvas → 既に static/js/lib/ に存在 │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  起動時にのみ必要（オフライン同梱不可）                       │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  [linux-headers]                                             │
+│    linux-headers-$(uname -r)                                 │
+│    カーネル版が環境ごとに異なるため事前同梱不可               │
+│    ※ただし同梱の deb が一致すればオフラインでもOK             │
+│    ※不一致の場合のみ apt install が必要                      │
+│                                                              │
+│  → つまり「同じカーネルで運用する限り完全オフライン」         │
+│  → カーネル更新時のみ linux-headers の再取得が必要            │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+```
+起動フロー
+
+ruview-scan --setup  (初回) or  ruview-scan (通常起動)
+  │
+  ├─ 1. setup_state.json 読み込み
+  │     ├─ 存在しない → 初回セットアップ
+  │     ├─ kernel_version 不一致 → 再ビルド
+  │     └─ 正常 → 環境チェックへ
+  │
+  ├─ 2. 環境チェック（env_checker.py）
+  │     ├─ [1] OS:     Linux か（Debian系推奨、非必須）
+  │     ├─ [2] Arch:   x86_64 / arm64
+  │     ├─ [3] CPU:    コア数・周波数（参考情報）
+  │     ├─ [4] NIC:    AX210/AX211/AX200 検出（lspci）
+  │     ├─ [5] FW:     /lib/firmware/iwlwifi-* 存在確認
+  │     ├─ [6] Headers: linux-headers-$(uname -r) 存在確認
+  │     ├─ [7] FeitCSI: feitcsi バイナリ存在 & カーネル一致
+  │     └─ [8] Deps:   libgtkmm, libnl, libpcap 等存在確認
+  │
+  ├─ 3. 自動修復（offline_installer.py + feitcsi_builder.py）
+  │     ├─ FW なし → setup/firmware/ からコピー
+  │     ├─ deb なし → setup/deb/ から dpkg -i（オフライン）
+  │     ├─ Headers なし → setup/deb/ を試行 → 無ければ apt install
+  │     ├─ Python未構築 → setup/python_wheels/ から pip install
+  │     ├─ FeitCSI 未ビルド → ソースからビルド（make → install）
+  │     └─ 各ステップの成否を setup_state.json に記録
+  │
+  ├─ 4. モニターモード設定（monitor_setup.py）
+  │     ├─ NIC 未検出 → スキップ（シミュレーションモードで続行）
+  │     ├─ NIC 検出 → rfkill unblock → ip link set down
+  │     ├─ FeitCSI ドライバでモニターモード有効化
+  │     └─ feitcsi --udp-socket でバックグラウンド起動
+  │
+  ├─ 5. FeitCSI ブリッジ初期化（feitcsi_bridge.py）
+  │     ├─ UDP ポート 8008 に接続確認
+  │     ├─ 測定パラメータ送信（周波数/帯域幅/フォーマット）
+  │     └─ CSI データ受信ループ開始
+  │
+  └─ 6. WebUI 起動 → スキャン画面表示
+        ├─ NIC あり → 実機スキャンモード
+        └─ NIC なし → シミュレーションモード（既存動作）
+
+```
+FeitCSI ↔ RuView Scan 統合設計
+
+┌──────────────┐     UDP:8008      ┌──────────────────┐
+│              │  ←── CSI data ──  │                  │
+│  RuView Scan │                   │  FeitCSI         │
+│  (Python)    │  ── commands ──→  │  (--udp-socket)  │
+│              │                   │                  │
+│  feitcsi_    │                   │  カスタム        │
+│  bridge.py   │                   │  iwlwifi ドライバ│
+└──────┬───────┘                   └────────┬─────────┘
+       │                                     │
+       │  CSI data (272B header + IQ data)   │ Monitor Mode
+       │                                     │
+       ▼                                     ▼
+┌──────────────┐                   ┌──────────────────┐
+│ feitcsi_     │                   │  AX210 NIC       │
+│ parser.py    │                   │  (PCIe/M.2)      │
+│              │                   │                  │
+│ → amplitude  │                   │  ← Wi-Fi frames  │
+│ → phase      │                   │     from         │
+│ → ToF推定    │                   │     モバイルWiFi  │
+└──────────────┘                   └──────────────────┘
+
+
+```
+
 ## 変更履歴
 
 ### Phase A (完了)
