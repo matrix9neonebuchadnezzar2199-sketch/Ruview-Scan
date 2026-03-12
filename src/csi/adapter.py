@@ -389,19 +389,295 @@ class SimulatedAdapter(CSIAdapter):
         )
 
 
+# ============================================================
+# FeitCSI Adapter (F-0j で追加)
+# ============================================================
 
-def create_adapter(source: str, config: dict) -> CSIAdapter:
-    """設定に基づきCSIアダプタを生成するファクトリ"""
-    if source == "picoscenes":
-        return PicoScenesAdapter(
-            udp_port=config.get("udp_port", 5500)
+class FeitCSIAdapter(CSIAdapter):
+    """
+    FeitCSI UDP Bridge 経由で CSI を取得するアダプタ
+    FeitCSI デーモン (port 8008) と UDP で通信し、リアルタイム CSI を受信する
+    """
+
+    def __init__(self, config: dict):
+        self.host = config.get("feitcsi_host", "127.0.0.1")
+        self.port = config.get("feitcsi_port", 8008)
+        self.frequency = config.get("frequency", 5180)
+        self.bandwidth = config.get("bandwidth", 160)
+        self.format = config.get("format", "HESU")
+        self.mode = config.get("mode", "measure")
+        self.antenna = config.get("antenna", "12")
+        self.tx_power = config.get("tx_power", 10)
+        self.output_file = config.get("output_file", "/tmp/ruview_csi.dat")
+
+        self._sock: Optional[socket.socket] = None
+        self._connected = False
+        self._recv_buffer = bytearray()
+        self._frame_count = 0
+        self._last_frame_time = 0.0
+
+        # FeitCSI ヘッダサイズ (固定 272 bytes)
+        self.HEADER_SIZE = 272
+
+    async def connect(self) -> None:
+        """FeitCSI UDP デーモンに接続し、測定コマンドを送信"""
+        try:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._sock.settimeout(5.0)
+            self._sock.setblocking(False)
+
+            # 測定開始コマンドを構築
+            cmd = self._build_command()
+            logger.info(f"FeitCSI 接続: {self.host}:{self.port}")
+            logger.info(f"FeitCSI コマンド: {cmd}")
+
+            # コマンド送信
+            self._sock.sendto(
+                cmd.encode('utf-8'),
+                (self.host, self.port)
+            )
+            self._connected = True
+            logger.info("FeitCSI 測定開始コマンド送信完了")
+
+        except Exception as e:
+            raise CSISourceError(f"FeitCSI 接続失敗: {e}")
+
+    async def disconnect(self) -> None:
+        """FeitCSI 測定を停止し、ソケットを閉じる"""
+        if self._sock:
+            try:
+                # stop コマンド送信
+                self._sock.sendto(
+                    b"stop",
+                    (self.host, self.port)
+                )
+                logger.info("FeitCSI 停止コマンド送信")
+            except Exception:
+                pass
+            finally:
+                self._sock.close()
+                self._sock = None
+                self._connected = False
+                logger.info("FeitCSI 切断完了")
+
+    async def read_frame(self) -> CSIFrame:
+        """
+        FeitCSI から 1 フレーム分の CSI データを読み取る
+        FeitCSI バイナリフォーマット: 272-byte header + CSI data
+        """
+        if not self._connected or not self._sock:
+            raise CSISourceError("FeitCSI 未接続")
+
+        try:
+            # 非同期でデータ受信を待つ
+            loop = asyncio.get_event_loop()
+            data = await asyncio.wait_for(
+                loop.sock_recv(self._sock, 65536),
+                timeout=5.0
+            )
+
+            if not data:
+                raise CSINoDataError("FeitCSI からデータなし")
+
+            self._recv_buffer.extend(data)
+
+            # バッファからフレームを抽出
+            frame = self._parse_buffer()
+            if frame is None:
+                raise CSINoDataError("完全なフレームがまだ揃っていません")
+
+            self._frame_count += 1
+            self._last_frame_time = time.time()
+            return frame
+
+        except asyncio.TimeoutError:
+            raise CSINoDataError("FeitCSI 受信タイムアウト (5s)")
+        except (CSISourceError, CSINoDataError):
+            raise
+        except Exception as e:
+            raise CSIParseError(f"FeitCSI フレーム読み取りエラー: {e}")
+
+    def _build_command(self) -> str:
+        """FeitCSI コマンド文字列を構築"""
+        parts = [
+            "feitcsi",
+            f"-f {self.frequency}",
+            f"-w {self.bandwidth}",
+            f"-r {self.format}",
+            f"-i {self.mode}",
+            f"-a {self.antenna}",
+            f"-t {self.tx_power}",
+            f"-o {self.output_file}",
+        ]
+        return " ".join(parts)
+
+    def _parse_buffer(self) -> Optional[CSIFrame]:
+        """
+        受信バッファから FeitCSI フレームを 1 つパースする
+        Header: 272 bytes (固定)
+          bytes 0-3:   CSI データサイズ (uint32)
+          bytes 12-19: タイムスタンプ (uint64, μs)
+          bytes 46:    RX アンテナ数 (uint8)
+          bytes 47:    TX アンテナ数 (uint8)
+          bytes 52-55: サブキャリア数 (uint32)
+          bytes 60-63: RSSI TX1 (int32)
+          bytes 64-67: RSSI TX2 (int32)
+          bytes 68-73: ソース MAC (6 bytes)
+        CSI Data: 4 × RX × TX × subcarriers bytes
+          各エントリ: int16 real + int16 imag
+        """
+        min_size = self.HEADER_SIZE + 4  # ヘッダ + 最小 CSI
+        if len(self._recv_buffer) < min_size:
+            return None
+
+        # CSI データサイズを読み取り
+        csi_data_size = struct.unpack_from('<I', self._recv_buffer, 0)[0]
+        total_frame_size = self.HEADER_SIZE + csi_data_size
+
+        if len(self._recv_buffer) < total_frame_size:
+            return None
+
+        # ヘッダ解析
+        header = bytes(self._recv_buffer[:self.HEADER_SIZE])
+        timestamp_us = struct.unpack_from('<Q', header, 12)[0]
+        n_rx = header[46]
+        n_tx = header[47]
+        n_subcarriers = struct.unpack_from('<I', header, 52)[0]
+        rssi_1 = struct.unpack_from('<i', header, 60)[0]
+        rssi_2 = struct.unpack_from('<i', header, 64)[0]
+        source_mac = ':'.join(f'{b:02x}' for b in header[68:74])
+
+        # RSSI: 2 アンテナの平均 (dBm)
+        if rssi_2 != 0:
+            rssi = (rssi_1 + rssi_2) / 2.0
+        else:
+            rssi = float(rssi_1)
+
+        # CSI データ解析
+        csi_raw = bytes(self._recv_buffer[self.HEADER_SIZE:total_frame_size])
+
+        expected_size = 4 * n_rx * n_tx * n_subcarriers
+        if csi_data_size < expected_size:
+            logger.warning(
+                f"CSI データサイズ不整合: {csi_data_size} < {expected_size} "
+                f"(RX={n_rx}, TX={n_tx}, SC={n_subcarriers})"
+            )
+            # バッファを進める
+            self._recv_buffer = self._recv_buffer[total_frame_size:]
+            return None
+
+        # int16 配列として解釈 → complex に変換
+        iq_array = np.frombuffer(csi_raw[:expected_size], dtype=np.int16)
+        iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
+
+        # shape: (n_rx, n_tx, n_subcarriers)
+        try:
+            csi_matrix = iq_complex.reshape(n_rx, n_tx, n_subcarriers)
+        except ValueError:
+            logger.warning(f"CSI reshape 失敗: {iq_complex.shape} → ({n_rx},{n_tx},{n_subcarriers})")
+            self._recv_buffer = self._recv_buffer[total_frame_size:]
+            return None
+
+        # バッファを消費
+        self._recv_buffer = self._recv_buffer[total_frame_size:]
+
+        # 振幅・位相
+        amplitude = np.abs(csi_matrix).flatten().tolist()
+        phase = np.angle(csi_matrix).flatten().tolist()
+
+        # サブキャリア周波数 (中心周波数 ± 帯域幅/2)
+        center_freq = self.frequency * 1e6
+        bw_hz = self.bandwidth * 1e6
+        subcarrier_spacing = bw_hz / n_subcarriers
+        subcarrier_freqs = [
+            center_freq - bw_hz / 2 + subcarrier_spacing * (i + 0.5)
+            for i in range(n_subcarriers)
+        ]
+
+        # CSIFrame 生成
+        frame = CSIFrame(
+            timestamp=timestamp_us / 1e6,  # μs → s
+            subcarrier_freqs=subcarrier_freqs,
+            amplitude=amplitude,
+            phase=phase,
+            rssi=rssi,
+            noise_floor=-90.0,  # FeitCSI ヘッダに noise floor なし → デフォルト
+            metadata={
+                "source": "feitcsi",
+                "source_mac": source_mac,
+                "n_rx": n_rx,
+                "n_tx": n_tx,
+                "n_subcarriers": n_subcarriers,
+                "rssi_tx1": rssi_1,
+                "rssi_tx2": rssi_2,
+                "frequency_mhz": self.frequency,
+                "bandwidth_mhz": self.bandwidth,
+                "format": self.format,
+                "frame_index": self._frame_count,
+            },
         )
+        return frame
+
+    def get_stats(self) -> dict:
+        """FeitCSI アダプタの統計情報"""
+        return {
+            "adapter": "feitcsi",
+            "connected": self._connected,
+            "frame_count": self._frame_count,
+            "last_frame_time": self._last_frame_time,
+            "frequency": self.frequency,
+            "bandwidth": self.bandwidth,
+            "format": self.format,
+            "buffer_size": len(self._recv_buffer),
+        }
+
+
+# ============================================================
+# ファクトリ関数 (改修版)
+# ============================================================
+
+def create_adapter(config: Optional[dict] = None) -> CSIAdapter:
+    """
+    設定に基づいて適切な CSI アダプタを生成するファクトリ関数
+
+    config["csi_source"]:
+        "feitcsi"    → FeitCSIAdapter (推奨・デフォルト)
+        "picoscenes" → PicoScenesAdapter (レガシー)
+        "simulate"   → SimulatedCSIAdapter
+    """
+    import os
+
+    if config is None:
+        config = {}
+
+    # 環境変数によるオーバーライド
+    source = os.environ.get(
+        'RUVIEW_CSI_SOURCE',
+        config.get('csi_source', 'feitcsi')
+    )
+
+    logger.info(f"CSI ソース選択: {source}")
+
+    if source == "feitcsi":
+        return FeitCSIAdapter(config)
+    elif source == "picoscenes":
+        return PicoScenesAdapter(config)
     elif source == "simulate":
-        return SimulatedAdapter(
-            sample_rate=config.get("sample_rate", 100)
-        )
+        return _create_simulated(config)
     else:
-        raise CSISourceError(
-            source=source,
-            detail=f"未知のCSIソース: '{source}' (対応: picoscenes, simulate)"
-        )
+        logger.warning(f"不明な CSI ソース '{source}' → シミュレーションにフォールバック")
+        return _create_simulated(config)
+
+
+def _create_simulated(config: dict) -> SimulatedAdapter:
+    """config dict から SimulatedAdapter の個別引数を展開して生成"""
+    return SimulatedAdapter(
+        channel=config.get("channel", 36),
+        bandwidth=config.get("bandwidth", 80),
+        num_subcarriers=config.get("num_subcarriers", 234),
+        num_tx=config.get("num_tx", 2),
+        num_rx=config.get("num_rx", 2),
+        sample_rate=config.get("sample_rate", 100.0),
+        room_dims=tuple(config.get("room_dims", (7.2, 5.4, 2.7))),
+        point_id=config.get("point_id", "center"),
+    )

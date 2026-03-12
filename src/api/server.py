@@ -1,4 +1,4 @@
-"""
+﻿"""
 RuView Scan - FastAPI Server
 (RF PROBE v2.0 構造を継承)
 """
@@ -72,7 +72,9 @@ async def lifespan(app: FastAPI):
             csi_source = "simulate"
             logger.info("CSI source: simulation (no NIC detected)")
 
-        state.csi_adapter = create_adapter(csi_source, csi_cfg)
+        # csi_source を config に統合して渡す (F-0j 改修対応)
+        csi_cfg["csi_source"] = csi_source
+        state.csi_adapter = create_adapter(csi_cfg)
         await state.csi_adapter.connect()
 
         # Phase calibrator
