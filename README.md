@@ -1,4 +1,4 @@
-**Wi-Fi CSI 壁面透視スキャナ — 6 面同時可視化 / 深度スライダー式構造探査 / 異物(盗聴器)検出**
+﻿**Wi-Fi CSI 壁面透視スキャナ — 6 面同時可視化 / 深度スライダー式構造探査 / 異物(盗聴器)検出**
 
 > 1 台のモバイル Wi-Fi ルーター + 1 台のノート PC で、部屋の壁・床・天井の **内部構造** を非接触で透視する。
 ![説明](https://sspark.genspark.ai/cfimages?u1=zUHvXfvPQTW%2BW5t0z0dMNg1Po35Lnox%2BWwJ1KxKFaOyfTaWchD2v5AEK32Nm1%2F6JdwfAWSKv9OGHx3ykUHRoYNitxNxDv1Rjx2LVSQNFNTqHwdadTp%2Bl4lzJSNV1mRDSDhQBpsbKag2R%2BfPx46rD%2FAPWNkARFltd&u2=yF0eymjcOiUXc%2Bq2&width=1024)
@@ -582,7 +582,7 @@ FeitCSI ↔ RuView Scan 統合設計
 - スキャン前から床面に全測定点を表示
 - API: /result/map/{face}/{band} でバンド別オンデマンド生成
 
-### Phase E (進行中)
+### Phase E (完了)
 - Three.js 3D ルームビューア実装 (6面BOX + OrbitControls 回転/ズーム)
 - 6面ヒートマップを3D BOX内面にテクスチャとして貼付
 - 深度スライダー・カラーマップ・不透明度が3Dビューとリアルタイム連動
@@ -591,7 +591,20 @@ FeitCSI ↔ RuView Scan 統合設計
 - 配管・異物の深度フィルタ対応 (depthプロパティベース)
 - 方角ラベル (北/南/東/西) + 測定ポイント (pos.1-9) を3D空間に表示
 - 2D描画でも配管・異物に深度フィルタ適用
-- PDF/CSV レポート出力 (実装中)
+- PDF/CSV レポート出力
+### Phase F-0 (完了)
+- PicoScenes → FeitCSI に完全切替（オープンソース、OS/カーネル非依存）
+- 環境自動構築システム実装（8項目チェック: OS/Arch/CPU/NIC/FW/Headers/FeitCSI/Deps）
+- オフラインインストーラ（setup/ フォルダに deb/firmware/wheels を同梱）
+- FeitCSI ソース自動ビルド（DKMS 対応、カーネル変更時は自動再ビルド）
+- AX210 モニターモード自動起動 + FeitCSI UDP サービス起動
+- 起動シーケンス統合（boot_sequence.py → 環境チェック → インストール → ビルド → モニター → WebUI）
+- FeitCSI UDP ブリッジ（port 8008）+ .dat バイナリパーサー
+- CSI アダプタに FeitCSIAdapter 追加（feitcsi/picoscenes/simulate 3択、デフォルト feitcsi）
+- main.py 改修（--feitcsi / --skip-setup オプション追加、ブート結果の自動判定）
+- WebUI システムステータス表示（/api/system/status + ログエリア自動表示）
+- 深度プリセットボタン 5 個削除（全表示/壁表面/浅部/深部/自動）
+
 ---
 
 ## ロードマップ
@@ -603,8 +616,9 @@ FeitCSI ↔ RuView Scan 統合設計
 | **B+** | カラーマップ, 不透明度, プリセット, ホバーツールチップ | ✅ 完了 |
 | **C** | 異物検出, RF パッシブスキャン, 脅威レベル分類 | ✅ 完了 |
 | **D** | 160 MHz 対応 (≈0.94 m 分解能), 追加測定点 (5→9) | ✅ 完了 |
-|    **E** | 3D ビュー (Three.js), PDF/CSV レポート出力 | 🔨 進行中 |
-| **F** | 実機キャリブレーション, AoA 統合, DI パターン | 🔧 予定 |
+|    **E** | 3D ビュー (Three.js), PDF/CSV レポート出力 | ✅ 完了 |
+| **F-0** | FeitCSI 統合, 環境自動構築, オフラインセットアップ | ✅ 完了 |
+| **F-1** | 実機キャリブレーション, AoA 統合, DI パターン | 🔧 予定 |
 
 ---
 ```

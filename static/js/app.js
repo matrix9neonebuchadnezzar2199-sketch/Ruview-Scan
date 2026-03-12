@@ -72,6 +72,9 @@ const RuView = (function() {
         if (fa) fa.addEventListener('click', function(){ openForeignModal(); });
         addLog('RuView Scan v1.1 起動', 'log-info');
         addLog('モバイルWi-Fiルーターを部屋中心に設置してください', 'log-info');
+
+        // F-0l: システムステータス取得
+        _fetchSystemStatus();
     }
 
     function _setupCanvasSize() {
@@ -860,6 +863,32 @@ const RuView = (function() {
     /** CSV export */
     function exportCSV() {
         ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned);
+    }
+
+    /** F-0l: システムステータスを取得してログに表示 */
+    function _fetchSystemStatus() {
+        fetch('/api/system/status')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var mode = d.simulation_mode ? 'シミュレーション' : '実機スキャン';
+                var src = d.csi_source || 'unknown';
+                var nic = d.nic_detected ? d.nic_name : '未検出';
+                var feit = d.feitcsi_available ? '利用可能' : '未利用';
+                var mon = d.monitor_active ? 'ON' : 'OFF';
+
+                addLog('--- システムステータス ---', 'log-info');
+                addLog('モード: ' + mode + ' | CSIソース: ' + src, 'log-info');
+                addLog('NIC: ' + nic + ' | FeitCSI: ' + feit + ' | Monitor: ' + mon, 'log-info');
+                addLog('OS: ' + (d.os_info || '-') + ' | Kernel: ' + (d.kernel || '-'), 'log-info');
+
+                if (d.message) {
+                    addLog(d.message, d.boot_success ? 'log-info' : 'log-error');
+                }
+                addLog('----------------------------', 'log-info');
+            })
+            .catch(function(e) {
+                addLog('システムステータス取得失敗: ' + e, 'log-error');
+            });
     }
 
     return {

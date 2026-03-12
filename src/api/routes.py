@@ -422,3 +422,59 @@ async def reset():
     state.foreign_objects = None
     return {"status": "reset"}
 
+
+# ===== System Status (F-0l) =====
+
+class SystemStatusResponse(BaseModel):
+    """環境・FeitCSI・モニターモードのステータス"""
+    boot_success: bool = False
+    simulation_mode: bool = True
+    feitcsi_available: bool = False
+    monitor_active: bool = False
+    csi_source: str = "unknown"
+    os_info: str = ""
+    kernel: str = ""
+    nic_detected: bool = False
+    nic_name: str = ""
+    environment_checks: list = []
+    message: str = ""
+
+
+@router.get("/system/status", response_model=SystemStatusResponse)
+async def get_system_status():
+    """環境構築・FeitCSI・モニターモードの現在ステータスを返す"""
+    import os
+    import json
+    import platform
+
+    resp = SystemStatusResponse()
+
+    # ブート結果を環境変数から取得
+    boot_json = os.environ.get("RUVIEW_BOOT_RESULT", "{}")
+    try:
+        boot = json.loads(boot_json)
+        resp.boot_success = boot.get("success", False)
+        resp.simulation_mode = boot.get("simulation_mode", True)
+        resp.feitcsi_available = boot.get("feitcsi_available", False)
+        resp.monitor_active = boot.get("monitor_active", False)
+        resp.message = boot.get("message", "")
+        resp.environment_checks = boot.get("env_summary", [])
+    except (json.JSONDecodeError, TypeError):
+        resp.message = "ブート結果取得失敗"
+
+    # CSI ソース
+    resp.csi_source = os.environ.get("RUVIEW_CSI_SOURCE", "unknown")
+
+    # OS / カーネル情報
+    resp.os_info = f"{platform.system()} {platform.release()}"
+    resp.kernel = platform.release()
+
+    # NIC 情報
+    if state.nic_info:
+        resp.nic_detected = True
+        resp.nic_name = getattr(state.nic_info, 'chipset', str(state.nic_info))
+    else:
+        resp.nic_detected = False
+        resp.nic_name = "未検出"
+
+    return resp

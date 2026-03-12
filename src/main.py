@@ -41,8 +41,8 @@ def run_boot_sequence(simulate: bool, skip_setup: bool, logger) -> dict:
         }
 
     try:
-        from src.setup.boot_sequence import BootSequenceController
-        controller = BootSequenceController()
+        from src.setup.boot_sequence import BootSequence
+        controller = BootSequence()
         result = controller.run()
 
         # 結果をログ出力
