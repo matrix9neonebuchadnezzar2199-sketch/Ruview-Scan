@@ -248,14 +248,25 @@ async def build_result(
 
             rmap_gen = ReflectionMapGenerator(state.room_dims)
             maps = rmap_gen.generate(session)
+            # 反射マップをキャッシュに保存（diff/enhanced含む）
+            state.reflection_maps = {}
+            for face_key, rmap in maps.items():
+                state.reflection_maps[face_key] = rmap
+                # 基本6面のみ _mix エイリアスを追加
+                if '_' not in face_key:
+                    state.reflection_maps[f"{face_key}_mix"] = rmap
+
 
             # 3. 構造物検出 (Phase B)
             from src.scan.structure_detector import StructureDetector
             detector = StructureDetector()
             all_structures = []
+            base_faces = {'floor', 'ceiling', 'north', 'south', 'east', 'west'}
             for face, rmap in maps.items():
-                structures = detector.detect(rmap)
-                all_structures.extend(structures)
+                if face in base_faces:
+                    structures = detector.detect(rmap)
+                    all_structures.extend(structures)
+
             state.structures = all_structures
 
             result["structures"] = [
@@ -332,14 +343,25 @@ async def get_reflection_map(face: str, band: str):
     if state.reflection_maps is None:
         raise HTTPException(404, detail="Reflection maps not generated yet. Run /api/build first.")
 
-    # キャッシュキー: "face_band" (例: "floor_160")
+    # キャッシュキー: "face_band" (例: "floor_160", "floor_diff", "floor_enhanced")
     cache_key = f"{face}_{band}"
 
     if cache_key not in state.reflection_maps:
         # フォールバック: band='mix' のキーまたは face 単体キーを探す
         rmap = state.reflection_maps.get(f"{face}_mix") or state.reflection_maps.get(face)
 
-        # それでもなく、かつ別バンドが要求された場合はオンデマンド生成
+        # diff/enhanced は build時に生成済みのはず → なければ404
+        if band in ('diff', 'enhanced'):
+            if rmap is None:
+                raise HTTPException(404, detail=f"Map not found: {face}/{band}. Run /api/build first.")
+            # diff/enhanced が未生成の場合も404
+            raise HTTPException(
+                404,
+                detail=f"Map not found: {face}/{band}. 背景差分マップが生成されていません。"
+                       f" /api/build を再実行してください。"
+            )
+
+        # それ以外のバンドはオンデマンド生成
         if rmap is None or band != 'mix':
             try:
                 from src.scan.reflection_map import ReflectionMapGenerator
@@ -358,6 +380,7 @@ async def get_reflection_map(face: str, band: str):
             raise HTTPException(404, detail=f"Map not found: {face}/{band}")
     else:
         rmap = state.reflection_maps[cache_key]
+
 
     return {
         "face": rmap.face,

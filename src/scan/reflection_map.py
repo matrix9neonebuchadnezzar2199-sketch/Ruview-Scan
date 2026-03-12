@@ -118,10 +118,16 @@ class ReflectionMapGenerator:
         # 散乱体なしのベースライン（壁反射のみ）を計算し、差分を取る
         try:
             baseline_amplitudes = self._extract_baseline_amplitudes(point_amplitudes)
-            
+
+            diff_maps = {}
+            enhanced_maps = {}
+
             for face in self.FACE_SPECS:
+                if face not in maps:
+                    continue
+
                 fw, fh = self._get_face_dimensions(face)
-                
+
                 # ベースラインマップ（壁反射のみの寄与）
                 baseline_grid, _, _ = self._build_face_grid(face, baseline_amplitudes)
                 if baseline_grid.max() > 0:
@@ -131,12 +137,12 @@ class ReflectionMapGenerator:
                     baseline_grid = baseline_grid / baseline_grid.max()
 
                 # 差分マップ: 通常 - ベースライン
-                raw_grid = maps[face].grid
+                raw_grid = maps[face].grid.copy()
                 diff_grid = np.clip(raw_grid - baseline_grid * 0.85, 0.0, None)
                 if diff_grid.max() > 0:
                     diff_grid = diff_grid / diff_grid.max()
 
-                maps[f"{face}_diff"] = ReflectionMap(
+                diff_maps[face] = ReflectionMap(
                     face=face,
                     width_m=fw,
                     height_m=fh,
@@ -150,7 +156,7 @@ class ReflectionMapGenerator:
                 if enhanced_grid.max() > 0:
                     enhanced_grid = enhanced_grid / enhanced_grid.max()
 
-                maps[f"{face}_enhanced"] = ReflectionMap(
+                enhanced_maps[face] = ReflectionMap(
                     face=face,
                     width_m=fw,
                     height_m=fh,
@@ -159,7 +165,20 @@ class ReflectionMapGenerator:
                     band=f"{band}_enhanced",
                 )
 
-            logger.info("背景差分マップ・構造物強調マップ生成完了")
+            # 差分・強調マップをメインのmaps辞書に追加
+            for face in diff_maps:
+                maps[f"{face}_diff"] = diff_maps[face]
+            for face in enhanced_maps:
+                maps[f"{face}_enhanced"] = enhanced_maps[face]
+
+            logger.info(
+                f"背景差分マップ・構造物強調マップ生成完了 "
+                f"(diff: {len(diff_maps)}面, enhanced: {len(enhanced_maps)}面)"
+            )
+
+        except Exception as e:
+            logger.warning(f"背景差分マップ生成失敗（通常マップは正常）: {e}", exc_info=True)
+
 
         except Exception as e:
             logger.warning(f"背景差分マップ生成失敗（通常マップは正常）: {e}")
