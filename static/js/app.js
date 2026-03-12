@@ -554,6 +554,10 @@ const RuView = (function() {
 
         ROOM.w = 7.2; ROOM.d = 5.4; ROOM.h = 2.7;
         scanned = true;
+        var _pdfBtn = document.getElementById('btnExportPDF');
+        var _csvBtn = document.getElementById('btnExportCSV');
+        if (_pdfBtn) _pdfBtn.disabled = false;
+        if (_csvBtn) _csvBtn.disabled = false;
         updateInfoPanel(totalPipes, totalForeign);
         updateForeignAlert();
         render();
@@ -617,6 +621,10 @@ const RuView = (function() {
         }
 
         scanned = true;
+        var _pdfBtn = document.getElementById('btnExportPDF');
+        var _csvBtn = document.getElementById('btnExportCSV');
+        if (_pdfBtn) _pdfBtn.disabled = false;
+        if (_csvBtn) _csvBtn.disabled = false;
         updateInfoPanel(totalPipes, totalForeign);
         updateForeignAlert();
         updateBadges();
@@ -844,8 +852,19 @@ const RuView = (function() {
 
     window.addEventListener('DOMContentLoaded', init);
 
+    /** PDF export */
+    function exportPDF() {
+        ReportExport.exportPDF(ROOM, VIEW_DATA, GRID_DATA, scanned);
+    }
+
+    /** CSV export */
+    function exportCSV() {
+        ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned);
+    }
+
     return {
         switchView: switchView, toggleFilter: toggleFilter, switchFreq: switchFreq,
+        exportPDF: exportPDF, exportCSV: exportCSV,
         switchColorMap: switchColorMap, buildResult: buildResult, resetAll: resetAll,
         addLog: addLog, render: render, confirmRoom: confirmRoom, isRoomReady: isRoomReady,
         onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset,
