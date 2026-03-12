@@ -125,12 +125,7 @@ const RuView = (function() {
             if (b.dataset.filter === key) b.classList.toggle('on', filters[key]);
         });
         if (is3DMode) {
-            console.log('3D structures update:', 'infra=' + filters.infra, 'foreign=' + filters.foreign);
-        var totalP = 0, totalF = 0;
-        for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
-        console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
-        var sl3d = { lower: parseFloat(document.getElementById('sliderLower').value), upper: parseFloat(document.getElementById('sliderUpper').value) };
-    Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign, sl3d.lower, sl3d.upper);
+            _update3DTextures();
         } else {
             render();
         }
