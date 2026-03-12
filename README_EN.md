@@ -63,19 +63,13 @@ $$H(f\_k) = \\sum\_{n=0}^{N-1} \\alpha\_n \\cdot e^{-j2\\pi f\_k \\tau\_n}$$
 
 
 | Symbol | Meaning |
-
 |--------|---------|
-
 | $\\alpha\_n$ | Complex amplitude of the n-th path (varies by material reflectivity) |
-
 | $\\tau\_n$ | Propagation delay of the n-th path = distance / speed of light |
-
 | $f\_k$ | Frequency of the k-th subcarrier |
 
 
-
 Metal pipes, electrical wiring, and PVC pipes each have different reflectivities; the magnitude of $\\alpha\_n$ is used to estimate material type.
-
 
 
 \### Measurement Method: 9-Point Sequential (5 Required + 4 Optional)
@@ -85,21 +79,13 @@ Metal pipes, electrical wiring, and PVC pipes each have different reflectivities
 ```
 
 &nbsp;         North Wall
-
 &nbsp;   ┌─────────────────┐
-
 &nbsp;   │⑨(NW)  ①(N)  ⑥(NE)│
-
 &nbsp;   │                 │
-
 West│④(W)    ⑤     ②(E)│ East
-
 &nbsp;   │      (Center)   │
-
 &nbsp;   │⑧(SW)  ③(S)  ⑦(SE)│
-
 &nbsp;   └─────────────────┘
-
 &nbsp;         South Wall
 
 
@@ -117,16 +103,10 @@ At each point, data is collected on 2.4 GHz (ch1, 40 MHz, 114 sc) + 5 GHz (ch36,
 
 
 | Band | Bandwidth | Theoretical Resolution $c / (2 \\cdot BW)$ |
-
 |------|-----------|-------------------------------------------|
-
 | 2.4 GHz | 40 MHz | 3.75 m |
-
 | 5 GHz | 80 MHz | 1.875 m |
-
 | 5 GHz | 160 MHz | \*\*≈ 0.94 m\*\* |
-
-
 
 160 MHz provides the highest resolution; 80 MHz is the primary estimation band; 2.4 GHz offers superior wall penetration for supplementary use.
 
@@ -141,23 +121,14 @@ At each point, data is collected on 2.4 GHz (ch1, 40 MHz, 114 sc) + 5 GHz (ch36,
 
 
 | Category | Technology | Purpose |
-
 |----------|-----------|---------|
-
 | CSI Extraction | \[FeitCSI](https://feitcsi.kuskosoft.com/) v2.0 | Open-source CSI tool. Supports all 802.11a/g/n/ac/ax formats |
-
 | NIC | Intel AX210 / AX211 / AX200 (M.2) | Monitor mode CSI reception (up to 160 MHz, 2×2 MIMO) |
-
 | Driver | FeitCSI-iwlwifi (custom iwlwifi) | DKMS-compatible. Auto-builds for current kernel version |
-
 | Backend | Python 3.11+ / FastAPI / uvicorn | REST API (20 endpoints) + WebSocket |
-
 | Frontend | HTML5 Canvas / Three.js / WebSocket | 6-face heatmap + 3D room viewer |
-
 | Signal Processing | NumPy / SciPy / MUSIC super-resolution | ToF estimation, phase calibration, band fusion |
-
 | CSI Parser | feitcsi\_parser.py / CSIKit | FeitCSI .dat binary (272B header + IQ data) |
-
 | Reports | jsPDF / html2canvas | PDF/CSV export |
 
 
@@ -173,83 +144,45 @@ At each point, data is collected on 2.4 GHz (ch1, 40 MHz, 114 sc) + 5 GHz (ch36,
 ```
 
 ┌──────────────┐     ┌───────────────────────────────────────────┐
-
 │  Browser UI  │◄────►  FastAPI Server (uvicorn, port 8080)     │
-
 │  (6-Face)    │ WS  │                                           │
-
 └──────────────┘     │  routes.py ── REST API (20 endpoints)     │
-
 &nbsp;                    │  ws.py ───── WebSocket /ws/scan           │
-
 &nbsp;                    │                                           │
-
 &nbsp;                    │  ┌─── Setup Layer ──────────────────┐     │
-
 &nbsp;                    │  │ boot\_sequence.py  Boot sequence   │     │
-
 &nbsp;                    │  │ env\_checker.py    8-item check    │     │
-
 &nbsp;                    │  │ offline\_installer.py Offline deps │     │
-
 &nbsp;                    │  │ feitcsi\_builder.py  Source build  │     │
-
 &nbsp;                    │  │ monitor\_setup.py  Monitor mode    │     │
-
 &nbsp;                    │  │ setup\_state.py    State persist   │     │
-
 &nbsp;                    │  └──────────────────────────────────┘     │
-
 &nbsp;                    │  ┌─── CSI Layer ────────────────────┐     │
-
 &nbsp;                    │  │ adapter.py   FeitCSI / Sim        │     │
-
 &nbsp;                    │  │ feitcsi\_bridge.py  UDP:8008       │     │
-
 &nbsp;                    │  │ feitcsi\_parser.py  .dat parser    │     │
-
 &nbsp;                    │  │ collector.py DualBandCollector     │     │
-
 &nbsp;                    │  │ calibration.py PhaseCalibrator     │     │
-
 &nbsp;                    │  │ models.py    CSIFrame / Session    │     │
-
 &nbsp;                    │  └──────────────────────────────────┘     │
-
 &nbsp;                    │  ┌─── Scan Layer ───────────────────┐     │
-
 &nbsp;                    │  │ tof\_estimator.py   MUSIC / ESPRIT │     │
-
 &nbsp;                    │  │ aoa\_estimator.py   AoA estimation │     │
-
 &nbsp;                    │  │ room\_estimator.py  Wall distance  │     │
-
 &nbsp;                    │  │ reflection\_map.py  CSI→6-face grid│     │
-
 &nbsp;                    │  │ structure\_detector.py Pipe detect │     │
-
 &nbsp;                    │  │ foreign\_detector.py  Rogue detect │     │
-
 &nbsp;                    │  └──────────────────────────────────┘     │
-
 &nbsp;                    │  ┌─── Fusion / RF ──────────────────┐     │
-
 &nbsp;                    │  │ band\_merger.py   2.4+5GHz fusion  │     │
-
 &nbsp;                    │  │ spatial\_integrator.py 5-pt fusion  │     │
-
 &nbsp;                    │  │ view\_generator.py 6-face gen      │     │
-
 &nbsp;                    │  │ scanner.py  Passive RF scan        │     │
-
 &nbsp;                    │  │ device\_classifier.py Device class  │     │
-
 &nbsp;                    │  └──────────────────────────────────┘     │
-
 &nbsp;                    └───────────────────────────────────────────┘
 
 ```
-
 
 
 \### FeitCSI Integration
@@ -259,45 +192,25 @@ At each point, data is collected on 2.4 GHz (ch1, 40 MHz, 114 sc) + 5 GHz (ch36,
 ```
 
 ┌──────────────┐     UDP:8008      ┌──────────────────┐
-
 │              │  ←── CSI data ──  │                  │
-
 │  RuView Scan │                   │  FeitCSI         │
-
 │  (Python)    │  ── commands ──→  │  (--udp-socket)  │
-
 │              │                   │                  │
-
 │  feitcsi\_    │                   │  Custom          │
-
 │  bridge.py   │                   │  iwlwifi driver  │
-
 └──────┬───────┘                   └────────┬─────────┘
-
 &nbsp;      │                                     │
-
 &nbsp;      │  CSI data (272B header + IQ data)   │ Monitor Mode
-
 &nbsp;      │                                     │
-
 &nbsp;      ▼                                     ▼
-
 ┌──────────────┐                   ┌──────────────────┐
-
 │ feitcsi\_     │                   │  AX210 NIC       │
-
 │ parser.py    │                   │  (PCIe/M.2)      │
-
 │              │                   │                  │
-
 │ → amplitude  │                   │  ← Wi-Fi frames  │
-
 │ → phase      │                   │     from         │
-
 │ → ToF est.   │                   │     Mobile WiFi  │
-
 └──────────────┘                   └──────────────────┘
-
 ```
 
 
@@ -313,79 +226,42 @@ At each point, data is collected on 2.4 GHz (ch1, 40 MHz, 114 sc) + 5 GHz (ch36,
 ```
 
 ruview-scan (launch)
-
 &nbsp; │
-
 &nbsp; ├─ 1. Load setup\_state.json
-
 &nbsp; │     ├─ Not found → First-time setup (online required)
-
 &nbsp; │     ├─ kernel\_version mismatch → Rebuild
-
 &nbsp; │     └─ OK → Quick check
-
 &nbsp; │
-
 &nbsp; ├─ 2. Environment Check (env\_checker.py: 8 items)
-
 &nbsp; │     ├─ \[1] OS      Linux (Debian-based recommended)
-
 &nbsp; │     ├─ \[2] Arch    x86\_64 / arm64
-
 &nbsp; │     ├─ \[3] CPU     Core count \& frequency
-
 &nbsp; │     ├─ \[4] NIC     AX210/AX211/AX200 detection (lspci)
-
 &nbsp; │     ├─ \[5] FW      /lib/firmware/iwlwifi-\* presence
-
 &nbsp; │     ├─ \[6] Headers linux-headers-$(uname -r) presence
-
 &nbsp; │     ├─ \[7] FeitCSI feitcsi binary \& kernel match
-
 &nbsp; │     └─ \[8] Deps    libgtkmm, libnl, libpcap, etc.
-
 &nbsp; │
-
 &nbsp; ├─ 3. Auto-Repair (offline\_installer.py + feitcsi\_builder.py)
-
 &nbsp; │     ├─ setup/firmware/ → Copy firmware
-
 &nbsp; │     ├─ setup/deb/ → dpkg -i (offline)
-
 &nbsp; │     ├─ setup/python\_wheels/ → pip install
-
 &nbsp; │     ├─ FeitCSI source build (make → install)
-
 &nbsp; │     └─ Record results in setup\_state.json
-
 &nbsp; │
-
 &nbsp; ├─ 4. Monitor Mode Setup (monitor\_setup.py)
-
 &nbsp; │     ├─ NIC not found → Continue in simulation mode
-
 &nbsp; │     ├─ NIC found → rfkill unblock → monitor mode
-
 &nbsp; │     └─ Launch feitcsi --udp-socket in background
-
 &nbsp; │
-
 &nbsp; ├─ 5. FeitCSI Bridge Init (feitcsi\_bridge.py)
-
 &nbsp; │     ├─ Verify UDP port 8008 connection
-
 &nbsp; │     ├─ Send measurement parameters (freq/BW/format)
-
 &nbsp; │     └─ Start CSI data receive loop
-
 &nbsp; │
-
 &nbsp; └─ 6. Launch WebUI → Scan screen
-
 &nbsp;       ├─ NIC present → Live scan mode
-
 &nbsp;       └─ NIC absent → Simulation mode
-
 ```
 
 
@@ -401,55 +277,30 @@ ruview-scan (launch)
 ```
 
 CSIFrame Collection (9 points × 3 bands)
-
 &nbsp;   │
-
 &nbsp;   ├─ PhaseCalibrator: Phase correction (STO/CPE removal)
-
 &nbsp;   │
-
 &nbsp;   ▼
-
 ToFEstimator (MUSIC Super-Resolution)
-
 &nbsp;   │   MUSIC spatial spectrum → path distance + amplitude
-
 &nbsp;   │
-
 &nbsp;   ├───────────────────┐
-
 &nbsp;   ▼                   ▼
-
 RoomEstimator      ReflectionMapGenerator
-
 (Image method       CSI amplitude → 6-face
-
 &nbsp;inversion)         grid (0.05 m) direct mapping
-
 &nbsp;   │               Gaussian-weighted interpolation
-
 &nbsp;   ▼               Normalized 0.0–1.0 output
-
 RoomDimensions          │
-
 (Manual 80% +           ▼
-
 &nbsp;ToF 20% fusion)   6×ReflectionMap
-
 &nbsp;                  (Normalized grids)
-
 &nbsp;                       │
-
 &nbsp;                  ┌────┴────┐
-
 &nbsp;                  ▼         ▼
-
 &nbsp;             StructureDetector   → Browser UI
-
 &nbsp;             (Connected-comp)       Depth slider to
-
 &nbsp;             (UI default OFF)       specify threshold range;
-
 &nbsp;                                    Canvas real-time rendering
 
 ```
@@ -461,21 +312,13 @@ RoomDimensions          │
 
 
 ```python
-
 \# Eigendecomposition of spatial correlation matrix
-
 Rxx = (1/K) Σ x(k) x(k)^H     # K: number of snapshots
-
 Rxx = U Λ U^H                  # Eigendecomposition
-
 \# Noise subspace
-
 Un = U\[:, n\_paths:]
-
 \# MUSIC spectrum
-
 P(τ) = 1 / |a(τ)^H Un Un^H a(τ)|
-
 \# a(τ) = \[1, e^{-j2πΔfτ}, ..., e^{-j2π(M-1)Δfτ}]^T
 
 ```
@@ -484,15 +327,9 @@ P(τ) = 1 / |a(τ)^H Un Un^H a(τ)|
 
 \### Room Dimension Estimation: Image Method Inversion
 
-
-
 Estimate wall distance from reflected path distance:
 
-
-
 $$d\_{wall} = \\frac{\\sqrt{d\_{reflection}^2 - d\_{direct}^2}}{2}$$
-
-
 
 When manual input is available, 80/20 fusion is applied: $d\_{fused} = 0.8 \\cdot d\_{manual} + 0.2 \\cdot d\_{ToF}$
 
@@ -503,17 +340,11 @@ When manual input is available, 80/20 fusion is applied: $d\_{fused} = 0.8 \\cdo
 
 
 | Material | Reflection Strength | Threshold |
-
 |----------|-------------------|-----------|
-
 | Metal pipe (steel, copper) | High | ≥ 0.6 |
-
 | Wall stud (wood/light steel) | Medium-high | 0.45–0.6 |
-
 | Electrical wiring (VVF) | Medium | 0.35–0.45 |
-
 | PVC pipe (VP/VU) | Low | 0.35–0.45 |
-
 
 
 ---
@@ -523,29 +354,17 @@ When manual input is available, 80/20 fusion is applied: $d\_{fused} = 0.8 \\cdo
 \## UI Features
 
 
-
 \### Depth Slider (CT-Scan Style)
-
-
 
 Reflection intensity is treated as depth, allowing users to adjust the display range with sliders.
 
-
-
 \- \*\*Lower bound slider\*\* (0–100): Hide reflection intensities below this value
-
 \- \*\*Upper bound slider\*\* (0–100): Hide reflection intensities above this value
-
 \- \*\*Opacity slider\*\* (0–100): Adjust overall heatmap transparency
-
-
 
 Each face (6 tabs) maintains independent slider values, automatically saved and restored on tab switch.
 
-
-
 !\[Description](https://sspark.genspark.ai/cfimages?u1=%2B0jLHT%2FtanDnsd8Xv5UQDf4YXd5IhqLSxYKyDaNDbD84trPgRJq7wWk3A5Pgalh3D02gyqBq05TiRhrqFPmuGAZiM3RBIR6AzE7Z14yzfPyMNi6QRiGSOyZwqerp0jPS9wSZI2otWY2rv1yg76RYyim%2BVTeHuaBm\&u2=Hnii8d%2F50tFaheNn\&width=1024)
-
 
 
 \### Color Map Switching
@@ -557,19 +376,12 @@ Each face (6 tabs) maintains independent slider values, automatically saved and 
 
 
 | ID | Name | Use Case |
-
 |----|------|----------|
-
 | thermal | Thermal | Default. Blue→Purple→Magenta→Red→Orange |
-
 | heat | Heat | Black→Red→Yellow→White. High contrast |
-
 | cool | Cool | Black→Blue→Cyan→White. Best for wiring |
-
 | grayscale | Grayscale | B\&W. For printing / PDF |
-
 | rainbow | Rainbow | Full spectrum. Fine intensity differences |
-
 
 
 !\[Description](https://sspark.genspark.ai/cfimages?u1=%2F615NXX2%2Bt5GeshUxsI%2FzaAgBfAeJwi%2ByDIiYlcpPOvtcgO14xW%2FXW0qLpkpm2JAvd4JPdZuidMkH1O8U0jBLChyw3diU2jd34z0ocW5OnbBEY4qri5X1ithdm0KnKHbAYDOiWXkYPL7heFv93XQnrXyqfvu9fhr\&u2=Rj5FtBwNwVSsqy75\&width=1024)
@@ -619,143 +431,74 @@ Each face (6 tabs) maintains independent slider values, automatically saved and 
 ```
 
 ruview-scan/
-
 ├── config/
-
 │   ├── default.yaml ........... Measurement parameters, analysis settings
-
 │   └── setup\_state.json ....... Build state persistence (auto-generated)
-
 ├── src/
-
 │   ├── main.py ................ CLI: --simulate, --feitcsi, --skip-setup, --host, --port
-
 │   ├── config.py .............. YAML → AppConfig (pydantic)
-
 │   ├── errors.py .............. Exception hierarchy (RuViewError → 7 subclasses)
-
 │   ├── setup/ ................. ★ Auto-setup module
-
 │   │   ├── \_\_init\_\_.py
-
 │   │   ├── setup\_state.py .... Build state management (JSON persistence)
-
 │   │   ├── env\_checker.py .... Environment scan (8-item check)
-
 │   │   ├── offline\_installer.py Offline bundled package installer
-
 │   │   ├── feitcsi\_builder.py  FeitCSI source auto-build (DKMS)
-
 │   │   ├── monitor\_setup.py .. AX210 monitor mode auto-setup
-
 │   │   └── boot\_sequence.py .. Boot sequence orchestrator
-
 │   ├── api/
-
 │   │   ├── server.py .......... AppState, FastAPI app, lifespan
-
 │   │   ├── routes.py .......... REST 20 endpoints (incl. /api/system/status)
-
 │   │   └── ws.py .............. WebSocket progress stream
-
 │   ├── csi/
-
 │   │   ├── models.py .......... CSIFrame, DualBandCapture, ScanSession
-
 │   │   ├── adapter.py ......... CSIAdapter ABC, FeitCSIAdapter, SimulatedAdapter
-
 │   │   ├── feitcsi\_bridge.py .. FeitCSI UDP bridge (port 8008)
-
 │   │   ├── feitcsi\_parser.py .. FeitCSI .dat binary parser
-
 │   │   ├── collector.py ....... DualBandCollector (3-band switching)
-
 │   │   └── calibration.py ..... PhaseCalibrator (STO/CPE correction)
-
 │   ├── scan/
-
 │   │   ├── scan\_manager.py .... Session management (9 points) + progress callback
-
 │   │   ├── tof\_estimator.py ... MUSIC / ESPRIT / IFFT super-resolution
-
 │   │   ├── aoa\_estimator.py ... AoA estimation (Phase F-1 integration planned)
-
 │   │   ├── room\_estimator.py .. Image method inversion → RoomDimensions
-
 │   │   ├── reflection\_map.py .. CSI amplitude → 6-face grid direct mapping
-
 │   │   ├── structure\_detector.py Connected-component → pipe/wiring detection
-
 │   │   └── foreign\_detector.py  RF+CSI residual → rogue device detection
-
 │   ├── fusion/
-
 │   │   ├── band\_merger.py ..... 2.4+5GHz weighted fusion
-
 │   │   ├── spatial\_integrator.py 5-point distance-weighted fusion
-
 │   │   └── view\_generator.py .. 6-face JSON + canvas coordinate transform
-
 │   ├── rf/
-
 │   │   ├── scanner.py ......... Passive RF scan
-
 │   │   └── device\_classifier.py OUI/RSSI/beacon → device classification
-
 │   └── utils/
-
 │       ├── math\_utils.py ...... MUSIC, ESPRIT, correlation matrix
-
 │       └── geo\_utils.py ....... channel\_to\_freq, project\_to\_wall
-
 ├── setup/ ..................... ★ Offline bundled packages
-
-│   ├── feitcsi/ ............... FeitCSI source (pre-cloned)
-
+     ├── feitcsi/ ............... FeitCSI source (pre-cloned)
 │   │   ├── FeitCSI/
-
 │   │   └── FeitCSI-iwlwifi/
-
 │   ├── deb/ ................... System dependency .deb packages
-
 │   ├── firmware/ .............. iwlwifi firmware (for AX210)
-
 │   ├── python\_wheels/ ......... Python dependency packages (.whl)
-
 │   └── download\_packages.sh ... Bulk download script for bundled packages
-
 ├── static/
-
 │   ├── index.html ............. 3-column UI (6-face view, 3D, scan control)
-
 │   ├── css/style.css .......... Dark theme UI
-
 │   └── js/
-
 │       ├── app.js ............. Main module + system status display
-
 │       ├── scan\_control.js .... 9-point scan control + 3 bands
-
 │       ├── websocket.js ....... WS connection + auto-reconnect
-
 │       ├── heatmap\_renderer.js  Server grid rendering (5 color maps)
-
 │       ├── floor\_renderer.js .. Pipe/foreign/point canvas rendering
-
 │       ├── room3d\_three.js .... Three.js 3D room viewer
-
 │       ├── report.js .......... PDF/CSV export
-
 │       ├── audio.js ........... Foreign object alert sound
-
 │       └── lib/ ............... Three.js, OrbitControls, jsPDF, html2canvas
-
 ├── docs/images/ ............... Screenshots
-
 ├── ruview.bat ................. Windows launch script
-
 ├── ruview.sh .................. Linux launch script
-
 └── requirements.txt
 
 ```
@@ -775,15 +518,10 @@ ruview-scan/
 
 
 | Hardware | Requirements | Purpose |
-
 |----------|-------------|---------|
-
 | Mobile Wi-Fi | 2.4 + 5 GHz dual band | TX (fixed at room center) |
-
 | Laptop | Intel AX210/AX211 equipped | RX (moved to 5–9 positions) |
-
 | OS | Kali Linux / Ubuntu 22.04+ / Debian-based | Live operation |
-
 | OS (Simulation) | Windows / macOS / Linux (any) | Development / Demo |
 
 
@@ -901,43 +639,24 @@ sudo python src/main.py --skip-setup
 ```
 
 ┌──────────────────────────────────────────────────────────────┐
-
 │  \[FeitCSI Source]                                            │
-
 │    FeitCSI/           → pre-cloned with --recursive          │
-
 │    FeitCSI-iwlwifi/   → pre-cloned                           │
-
 │    \* Built for current kernel at boot (make → make install)  │
-
 │                                                              │
-
 │  \[System .deb Packages]                                      │
-
 │    build-essential, dkms, flex, bison                        │
-
 │    libgtkmm-3.0-dev, libnl-genl-3-dev                       │
-
 │    libiw-dev, libpcap-dev, iw, wireless-tools, rfkill        │
-
 │                                                              │
-
 │  \[Firmware]                                                   │
-
 │    iwlwifi-ty-a0-gf-a0-\*.ucode (for AX210)                  │
-
 │                                                              │
-
 │  \[Python Wheels]                                              │
-
 │    fastapi, uvicorn, websockets, numpy, scipy, etc.          │
-
 │                                                              │
-
 │  \[Frontend]                                                   │
-
 │    Three.js, jsPDF, html2canvas → in static/js/lib/          │
-
 └──────────────────────────────────────────────────────────────┘
 
 ```
@@ -951,23 +670,14 @@ sudo python src/main.py --skip-setup
 ```
 
 ┌──────────────────────────────────────────────────────────────┐
-
 │  \[linux-headers]                                             │
-
 │    linux-headers-$(uname -r)                                 │
-
 │    Cannot be pre-bundled due to kernel version variability   │
-
 │    \* If bundled deb matches → works offline                  │
-
 │    \* Otherwise → apt install required                        │
-
 │                                                              │
-
 │  → Fully offline as long as running on the same kernel       │
-
 │  → Only linux-headers re-download needed on kernel updates   │
-
 └──────────────────────────────────────────────────────────────┘
 
 ```
@@ -983,13 +693,9 @@ sudo python src/main.py --skip-setup
 
 
 | Endpoint | Direction | Message Type |
-
 |----------|-----------|-------------|
-
 | `/ws/scan` | Server→Client | `status`, `progress`, `scan\_complete`, `error` |
-
 | `/ws/scan` | Client→Server | `{action: "start\_scan", point\_id: "north"}` |
-
 
 
 ---
@@ -1171,34 +877,19 @@ The `--simulate` flag launches physics-based CSI simulation.
 
 
 | Phase | Description | Status |
-
 |-------|------------|--------|
-
 | \*\*A\*\* | CSI acquisition, ToF estimation, basic UI | ✅ Complete |
-
 | \*\*B\*\* | Direct CSI amplitude mapping, depth slider | ✅ Complete |
-
 | \*\*B+\*\* | Color maps, opacity, presets, hover tooltip | ✅ Complete |
-
 | \*\*C\*\* | Foreign object detection, RF passive scan, threat classification | ✅ Complete |
-
 | \*\*D\*\* | 160 MHz support (≈0.94 m resolution), additional points (5→9) | ✅ Complete |
-
 | \*\*E\*\* | 3D viewer (Three.js), PDF/CSV report export | ✅ Complete |
-
 | \*\*F-0\*\* | FeitCSI integration, auto-setup, offline setup | ✅ Complete |
-
 | \*\*F-1\*\* | Live calibration, AoA integration, DI patterns | 🔧 Planned |
-
 
 
 ---
 
-
-
 \## License
-
-
-
 Private — Unauthorized reproduction or copying prohibited (no commercial use)
 
