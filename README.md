@@ -18,6 +18,8 @@
 
 ### CSI (Channel State Information) とは
 
+![説明](docs/images/0.png)
+
 Wi-Fi フレームの各サブキャリアに対する複素チャネル応答 $H(f_k)$ を取得する技術。振幅はパス損失・反射強度を、位相は伝搬遅延（ToF）を含む。Intel AX210 + [FeitCSI](https://feitcsi.kuskosoft.com/) でリアルタイム CSI 抽出が可能。
 
 ### 設計思想
