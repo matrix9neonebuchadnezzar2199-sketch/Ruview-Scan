@@ -1,5 +1,4 @@
-﻿了解です。README全文を出力します。
-
+﻿
 ---
 
 # RuView Scan
