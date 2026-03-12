@@ -336,24 +336,6 @@ sudo bash ruview.sh
 
 ---
 
-## API リファレンス
-
-### REST Endpoints
-
-| Endpoint | Method | 説明 | パラメータ |
-|----------|--------|----------|-----------|
-| `/api/health` | GET | ヘルスチェック | — |
-| `/api/session/create` | POST | セッション作成 | — |
-| `/api/scan/{point_id}/start` | POST | スキャン開始 | point_id: north/east/south/west/center/northeast/southeast/southwest/northwest |
-| `/api/scan/{point_id}/status` | GET | ポイント別状態 | — |
-| `/api/scan/status` | GET | 全体状態 | — |
-| `/api/build` | POST | 3D 化実行 | `?manual_width=&manual_depth=&manual_height=` (Optional) |
-| `/api/result/room` | GET | 推定部屋寸法 | — |
-| `/api/result/map/{face}/{band}` | GET | 面別反射マップ (グリッドデータ) | face: floor/ceiling/north/south/east/west, band: mix/24/5/160 |
-| `/api/result/structures` | GET | 検出構造物リスト | — |
-| `/api/result/foreign` | GET | 異物情報 | — |
-| `/api/reset` | POST | セッションリセット | — |
-
 ### WebSocket
 
 | Endpoint | 方向 | メッセージ type |
