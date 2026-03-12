@@ -323,6 +323,57 @@ class SimulatedAdapter(CSIAdapter):
 
         return paths
 
+    def _path_antenna_phase(
+        self, path_label: str, rx_idx: int,
+        d_antenna: float, center_freq: float
+    ) -> float:
+        """
+        パスの到来方向に基づくRXアンテナ間位相差を計算
+
+        各反射パス (壁/天井/床/配管) の到来方位角を幾何的に決定し、
+        ULAモデルでアンテナ間位相差を返す。
+
+        Args:
+            path_label: パスのラベル ('direct', 'north_wall', 'pipe_metal' 等)
+            rx_idx: RXアンテナインデックス (0 or 1)
+            d_antenna: アンテナ間隔 (m)
+            center_freq: 中心周波数 (Hz)
+
+        Returns:
+            位相オフセット (rad)
+        """
+        wavelength = self.SPEED_OF_LIGHT / center_freq
+        px, py, pz = self._position
+        rx, ry, rz = self._router_pos
+        w, d, h = self.room_dims
+
+        # パスラベルから反射点の方向ベクトルを推定
+        # 鏡像法: 反射パスは鏡像ルーターから直線で到来
+        if path_label == 'direct':
+            dx, dy = rx - px, ry - py
+        elif path_label == 'north_wall':
+            dx, dy = rx - px, (-ry) - py
+        elif path_label == 'south_wall':
+            dx, dy = rx - px, (2 * d - ry) - py
+        elif path_label == 'west_wall':
+            dx, dy = (-rx) - px, ry - py
+        elif path_label == 'east_wall':
+            dx, dy = (2 * w - rx) - px, ry - py
+        elif path_label in ('ceiling', 'floor'):
+            dx, dy = rx - px, ry - py  # 水平方向は直接波と同じ
+        else:
+            # 配管等の散乱体: ラベルから位置を特定できないので小さなランダム位相
+            return rx_idx * np.random.uniform(-0.3, 0.3)
+
+        # 方位角 (rad): atan2(dx, dy) で北=0, 東=+π/2
+        azimuth = np.arctan2(dx, dy) if (abs(dx) + abs(dy)) > 0.01 else 0.0
+
+        # ULAモデル: phase = 2π * d * sin(θ) / λ * rx_idx
+        phase_offset = 2 * np.pi * d_antenna * np.sin(azimuth) / wavelength * rx_idx
+
+        return phase_offset
+
+
     async def read_frame(self) -> Optional[CSIFrame]:
         if not self._connected:
             return None
@@ -343,16 +394,28 @@ class SimulatedAdapter(CSIAdapter):
         paths = self._build_multipath_components()
 
         # H(f_k) = Σ α_n · exp(-j 2π f_k τ_n) をストリームごとに計算
+        # ストリーム = (rx_idx * n_tx + tx_idx) の順
+        # AoA対応: 各パスの到来方向に基づくアンテナ間位相差を付与
+        d_antenna = 0.03  # アンテナ間隔 (m) — AX210: 約λ/2 @ 5GHz
+
         amplitude = np.zeros((self.num_sc, n_streams))
         phase = np.zeros((self.num_sc, n_streams))
 
         for stream in range(n_streams):
+            rx_idx = stream // self.num_tx
+            tx_idx = stream % self.num_tx
+
             h = np.zeros(self.num_sc, dtype=complex)
             for dist, amp, label in paths:
                 tau = 2.0 * dist / self.SPEED_OF_LIGHT  # 往復遅延
-                # ストリームごとの微小位相差 (アンテナ間隔)
-                stream_phase = stream * 0.3
-                alpha = amp * np.exp(1j * stream_phase)
+
+                # パスの到来方位角を計算 (計測点→反射点の方向)
+                # 壁反射の場合、鏡像法の距離からAoAを逆算
+                aoa_phase = self._path_antenna_phase(
+                    label, rx_idx, d_antenna, center_freq
+                )
+
+                alpha = amp * np.exp(1j * aoa_phase)
                 h += alpha * np.exp(-1j * 2 * np.pi * subcarrier_freqs * tau)
 
             # 微小ノイズ (熱雑音 + 量子化ノイズ)
@@ -365,6 +428,8 @@ class SimulatedAdapter(CSIAdapter):
 
             amplitude[:, stream] = np.abs(h)
             phase[:, stream] = np.angle(h)
+
+
 
         if self.channel <= 14:
             freq_band = '2.4GHz'
@@ -581,42 +646,49 @@ class FeitCSIAdapter(CSIAdapter):
         # バッファを消費
         self._recv_buffer = self._recv_buffer[total_frame_size:]
 
-        # 振幅・位相
-        amplitude = np.abs(csi_matrix).flatten().tolist()
-        phase = np.angle(csi_matrix).flatten().tolist()
+        # (n_rx, n_tx, n_subcarriers) → (n_subcarriers, n_tx * n_rx) に変換
+        # CSIFrame の amplitude/phase の期待 shape に合わせる
+        # 軸の並べ替え: (n_rx, n_tx, n_sc) → (n_sc, n_rx, n_tx) → (n_sc, n_rx * n_tx)
+        csi_transposed = csi_matrix.transpose(2, 0, 1)  # (n_sc, n_rx, n_tx)
+        csi_2d = csi_transposed.reshape(n_subcarriers, n_rx * n_tx)  # (n_sc, n_streams)
 
-        # サブキャリア周波数 (中心周波数 ± 帯域幅/2)
-        center_freq = self.frequency * 1e6
-        bw_hz = self.bandwidth * 1e6
-        subcarrier_spacing = bw_hz / n_subcarriers
-        subcarrier_freqs = [
-            center_freq - bw_hz / 2 + subcarrier_spacing * (i + 0.5)
-            for i in range(n_subcarriers)
-        ]
+        amplitude = np.abs(csi_2d).astype(np.float64)
+        phase = np.angle(csi_2d).astype(np.float64)
 
-        # CSIFrame 生成
+        # 周波数帯を判定
+        channel = int(self.frequency / 5) if self.frequency > 3000 else 1
+        if self.frequency < 3000:
+            freq_band = '2.4GHz'
+        elif self.bandwidth >= 160:
+            freq_band = '5GHz_160'
+        else:
+            freq_band = '5GHz'
+
+        # CSIFrame 生成 (models.py の shape バリデーションに適合)
         frame = CSIFrame(
-            timestamp=timestamp_us / 1e6,  # μs → s
-            subcarrier_freqs=subcarrier_freqs,
+            timestamp=timestamp_us / 1e6,
+            source_mac=source_mac,
+            channel=channel,
+            bandwidth=self.bandwidth,
+            frequency_band=freq_band,
+            rssi=rssi,
+            noise_floor=-90.0,
+            n_subcarriers=n_subcarriers,
+            n_tx=n_tx,
+            n_rx=n_rx,
             amplitude=amplitude,
             phase=phase,
-            rssi=rssi,
-            noise_floor=-90.0,  # FeitCSI ヘッダに noise floor なし → デフォルト
             metadata={
                 "source": "feitcsi",
-                "source_mac": source_mac,
-                "n_rx": n_rx,
-                "n_tx": n_tx,
-                "n_subcarriers": n_subcarriers,
                 "rssi_tx1": rssi_1,
                 "rssi_tx2": rssi_2,
                 "frequency_mhz": self.frequency,
-                "bandwidth_mhz": self.bandwidth,
                 "format": self.format,
                 "frame_index": self._frame_count,
             },
         )
         return frame
+
 
     def get_stats(self) -> dict:
         """FeitCSI アダプタの統計情報"""

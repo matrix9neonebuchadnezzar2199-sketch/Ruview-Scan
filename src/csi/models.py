@@ -26,6 +26,8 @@ class CSIFrame:
     n_rx: int                           # RX アンテナ数
     amplitude: np.ndarray               # shape: (n_subcarriers, n_tx * n_rx)
     phase: np.ndarray                   # shape: (n_subcarriers, n_tx * n_rx)
+    metadata: dict = None               # 追加情報 (FeitCSI等のソース固有データ)
+
 
     def __post_init__(self):
         """バリデーション"""

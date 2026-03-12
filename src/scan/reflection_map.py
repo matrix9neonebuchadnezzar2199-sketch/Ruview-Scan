@@ -67,7 +67,9 @@ class ReflectionMapGenerator:
         self.spread_sigma_m = spread_sigma_m
 
     def generate(self, session: ScanSession,
-                 band: str = 'mix') -> Dict[str, ReflectionMap]:
+                 band: str = 'mix',
+                 aoa_positions: Optional[List[dict]] = None) -> Dict[str, ReflectionMap]:
+
         """6面それぞれの ReflectionMap を生成"""
 
         # ERR-B02: 計測点ごとのCSI振幅統計を集約
@@ -83,9 +85,16 @@ class ReflectionMapGenerator:
         )
 
         # ERR-B04: 各面のグリッドを生成
+        # AoA位置データの有無をログ
+        if aoa_positions:
+            logger.info(f"AoA壁面位置データ: {len(aoa_positions)}件を統合")
+
         maps = {}
         for face in self.FACE_SPECS:
             grid, fw, fh = self._build_face_grid(face, point_amplitudes)
+            # AoA による追加重み
+            if aoa_positions:
+                grid = self._apply_aoa_weights(grid, face, fw, fh, aoa_positions)
 
             # 正規化
             if grid.max() > 0:
@@ -270,6 +279,86 @@ class ReflectionMapGenerator:
             xyz[..., 2] = vv
 
         return xyz
+
+
+    def _apply_aoa_weights(
+        self,
+        grid: np.ndarray,
+        face: str,
+        face_width: float,
+        face_height: float,
+        aoa_positions: List[dict],
+        aoa_sigma_m: float = 0.5,
+        aoa_weight: float = 3.0,
+    ) -> np.ndarray:
+        """
+        AoA で特定された壁面位置にガウスカーネルで追加重みを配分
+
+        AoA の信頼度が低い場合は自動的に重みが小さくなり、
+        ToF のみの結果に近づく (グレースフルフォールバック)。
+
+        Args:
+            grid: 現在のグリッド shape (n_rows, n_cols)
+            face: 壁面名
+            face_width: 壁面幅 (m)
+            face_height: 壁面高さ (m)
+            aoa_positions: AoA壁面位置リスト
+                [{"face": "north", "u": 2.3, "v": 1.5, "confidence": 0.65}, ...]
+            aoa_sigma_m: AoAガウスカーネルの標準偏差 (m)
+            aoa_weight: AoA重みの倍率
+
+        Returns:
+            更新されたグリッド
+
+        ERR-AOA-G01: AoA重み適用
+        """
+        n_rows, n_cols = grid.shape
+
+        # この面に該当するAoA位置のみフィルタ
+        face_positions = [p for p in aoa_positions if p.get("face") == face]
+
+        if not face_positions:
+            return grid
+
+        # グリッドセルの中心座標 (メートル)
+        u_centers = np.linspace(
+            self.grid_resolution / 2,
+            face_width - self.grid_resolution / 2,
+            n_cols
+        )
+        v_centers = np.linspace(
+            self.grid_resolution / 2,
+            face_height - self.grid_resolution / 2,
+            n_rows
+        )
+        uu, vv = np.meshgrid(u_centers, v_centers)  # (n_rows, n_cols)
+
+        aoa_sigma_sq = 2.0 * (aoa_sigma_m ** 2)
+
+        for pos in face_positions:
+            u_pos = pos.get("u", 0.0)
+            v_pos = pos.get("v", 0.0)
+            confidence = pos.get("confidence", 0.5)
+
+            # 位置が壁面範囲外なら無視
+            if u_pos < 0 or u_pos > face_width or v_pos < 0 or v_pos > face_height:
+                continue
+
+            # ガウスカーネル: AoA位置からの距離に基づく
+            dist_sq = (uu - u_pos) ** 2 + (vv - v_pos) ** 2
+            kernel = np.exp(-dist_sq / aoa_sigma_sq)
+
+            # 信頼度 × 倍率で重み付け
+            contribution = kernel * confidence * aoa_weight
+            grid += contribution
+
+        logger.debug(
+            f"AoA重み適用: {face} に {len(face_positions)}点, "
+            f"sigma={aoa_sigma_m}m, weight={aoa_weight}"
+        )
+
+        return grid
+
 
     def _generate_empty_maps(self, band: str) -> Dict[str, ReflectionMap]:
         """データなし時の空マップを生成"""

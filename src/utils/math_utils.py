@@ -176,3 +176,90 @@ def get_subcarrier_frequencies(center_freq_hz: float, bandwidth_mhz: int,
     start_freq = center_freq_hz - bw_hz / 2 + delta_f / 2
     freqs = start_freq + np.arange(n_subcarriers) * delta_f
     return freqs
+
+
+
+def aoa_steering_vector_2d(n_antennas: int, wavelength: float,
+                           theta: float, phi: float,
+                           d: float = None) -> np.ndarray:
+    """
+    2D AoA推定用ステアリングベクトル (方位角 + 仰角)
+
+    ULA (Uniform Linear Array) を仮定し、方位角と仰角の両方を考慮した
+    位相差ベクトルを生成する。
+
+    Parameters:
+        n_antennas: アンテナ数 (仮想アンテナ数を含む)
+        wavelength: 波長 (m)
+        theta: 方位角 (rad) — -π/2 ~ +π/2
+        phi: 仰角 (rad) — -π/4 ~ +π/4
+        d: アンテナ間距離 (m) — デフォルトは λ/2
+    Returns:
+        a: shape (n_antennas, 1) — ステアリングベクトル
+    """
+    if d is None:
+        d = wavelength / 2
+    n = np.arange(n_antennas)
+    # ULAの場合、仰角は sin(theta)*cos(phi) として影響
+    spatial_freq = d * np.sin(theta) * np.cos(phi) / wavelength
+    a = np.exp(-1j * 2 * np.pi * spatial_freq * n)
+    return a.reshape(-1, 1)
+
+
+def music_spectrum_2d(R: np.ndarray, n_signals: int,
+                      n_antennas: int, wavelength: float,
+                      azimuth_range: np.ndarray,
+                      elevation_range: np.ndarray,
+                      d: float = None) -> np.ndarray:
+    """
+    2D MUSICスペクトルを計算 (方位角 × 仰角)
+
+    ベクトル化により高速に計算する。
+
+    Parameters:
+        R: shape (M, M) — 共分散行列
+        n_signals: 信号源数
+        n_antennas: アンテナ数 (M)
+        wavelength: 波長 (m)
+        azimuth_range: shape (N_az,) — 方位角候補 (rad)
+        elevation_range: shape (N_el,) — 仰角候補 (rad)
+        d: アンテナ間距離 (m) — デフォルト λ/2
+    Returns:
+        spectrum: shape (N_az, N_el) — 2D MUSICスペクトル
+    """
+    if d is None:
+        d = wavelength / 2
+
+    # 固有値分解 → ノイズ部分空間
+    eigenvalues, eigenvectors = np.linalg.eigh(R)
+    idx = np.argsort(eigenvalues)[::-1]
+    eigenvectors = eigenvectors[:, idx]
+    En = eigenvectors[:, n_signals:]
+    En_EnH = En @ En.conj().T
+
+    n_az = len(azimuth_range)
+    n_el = len(elevation_range)
+    spectrum = np.zeros((n_az, n_el))
+
+    # アンテナインデックス
+    n = np.arange(n_antennas)
+
+    # 方位角ごとにベクトル化 (仰角方向は一括計算)
+    for i, theta in enumerate(azimuth_range):
+        sin_theta = np.sin(theta)
+        # cos(phi) を仰角候補全体で一括計算
+        cos_phi = np.cos(elevation_range)  # (N_el,)
+        # 空間周波数: (N_el,) の各値に対して n_antennas 個の位相
+        spatial_freq = d * sin_theta * cos_phi / wavelength  # (N_el,)
+        # ステアリング行列: (n_antennas, N_el)
+        phase_matrix = -1j * 2 * np.pi * np.outer(n, spatial_freq)
+        A = np.exp(phase_matrix)  # (n_antennas, N_el)
+
+        # MUSIC: P = 1 / |a^H En En^H a| を一括計算
+        # En_EnH @ A: (n_antennas, N_el)
+        tmp = En_EnH @ A  # (n_antennas, N_el)
+        # 各列の内積: sum(A.conj() * tmp, axis=0)
+        denom = np.abs(np.sum(A.conj() * tmp, axis=0))  # (N_el,)
+        spectrum[i, :] = 1.0 / np.maximum(denom, 1e-15)
+
+    return spectrum
