@@ -341,7 +341,7 @@ sudo bash ruview.sh
 ### REST Endpoints
 
 | Endpoint | Method | 説明 | パラメータ |
-|----------|--------|------|-----------|
+|----------|--------|----------|-----------|
 | `/api/health` | GET | ヘルスチェック | — |
 | `/api/session/create` | POST | セッション作成 | — |
 | `/api/scan/{point_id}/start` | POST | スキャン開始 | point_id: north/east/south/west/center/northeast/southeast/southwest/northwest |
