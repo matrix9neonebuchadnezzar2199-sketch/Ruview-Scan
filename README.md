@@ -9,6 +9,9 @@
 
 ![説明](https://sspark.genspark.ai/cfimages?u1=zUHvXfvPQTW%2BW5t0z0dMNg1Po35Lnox%2BWwJ1KxKFaOyfTaWchD2v5AEK32Nm1%2F6JdwfAWSKv9OGHx3ykUHRoYNitxNxDv1Rjx2LVSQNFNTqHwdadTp%2Bl4lzJSNV1mRDSDhQBpsbKag2R%2BfPx46rD%2FAPWNkARFltd&u2=yF0eymjcOiUXc%2Bq2&width=1024)
 
+
+> 🇯🇵 日本語 | [🇬🇧 English](README_EN.md)
+
 ---
 
 ## 動作原理
