@@ -154,8 +154,17 @@ def get_measurement_position(
         return Point3D(1.0, room.depth / 2, measurement_height)
     elif point_id == 'center':
         return Point3D(room.width / 2, room.depth / 2, measurement_height)
+    elif point_id == 'northeast':
+        return Point3D(room.width - 1.0, 1.0, measurement_height)
+    elif point_id == 'southeast':
+        return Point3D(room.width - 1.0, room.depth - 1.0, measurement_height)
+    elif point_id == 'southwest':
+        return Point3D(1.0, room.depth - 1.0, measurement_height)
+    elif point_id == 'northwest':
+        return Point3D(1.0, 1.0, measurement_height)
     else:
         raise ValueError(f"Unknown point_id: {point_id}")
+
 
 
 def project_to_wall(

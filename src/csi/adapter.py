@@ -656,7 +656,14 @@ class FeitCSIAdapter(CSIAdapter):
         phase = np.angle(csi_2d).astype(np.float64)
 
         # 周波数帯を判定
-        channel = int(self.frequency / 5) if self.frequency > 3000 else 1
+        # Wi-Fiチャネル番号を周波数(MHz)から逆算
+        # 5GHz: ch = (freq_mhz - 5000) / 5  例: 5180 → 36
+        # 2.4GHz: ch = (freq_mhz - 2407) / 5  例: 2412 → 1
+        if self.frequency > 3000:
+            channel = (self.frequency - 5000) // 5
+        else:
+            channel = max(1, (self.frequency - 2407) // 5)
+
         if self.frequency < 3000:
             freq_band = '2.4GHz'
         elif self.bandwidth >= 160:
