@@ -2,13 +2,13 @@
  * RuView Scan - メインアプリケーション
  * Phase B+: カラーマップ切替 + 透明度 + プリセット + マウスホバー値表示
  */
-const RuView = (function() {
+const RuView = (function () {
     const API = '/api';
 
     // --- State ---
     let currentView = 'floor';
     let currentFreq = 'mix';
-    let currentColorMap = 'thermal';
+    let currentAnalysis = 'normal';
     let heatmapOpacity = 1.0;
     let scanned = false;
     const filters = { infra: false, foreign: true, heatmap: true };
@@ -18,12 +18,12 @@ const RuView = (function() {
     const ROOM = { w: 7.2, d: 5.4, h: 2.7 };
 
     const VIEW_DATA = {
-        floor:   { label:'床面',   w:ROOM.w, h:ROOM.d, pipes:[], foreign:[] },
-        ceiling: { label:'天井',   w:ROOM.w, h:ROOM.d, pipes:[], foreign:[] },
-        north:   { label:'北壁',   w:ROOM.w, h:ROOM.h, pipes:[], foreign:[] },
-        south:   { label:'南壁',   w:ROOM.w, h:ROOM.h, pipes:[], foreign:[] },
-        east:    { label:'東壁',   w:ROOM.d, h:ROOM.h, pipes:[], foreign:[] },
-        west:    { label:'西壁',   w:ROOM.d, h:ROOM.h, pipes:[], foreign:[] },
+        floor: { label: '床面', w: ROOM.w, h: ROOM.d, pipes: [], foreign: [] },
+        ceiling: { label: '天井', w: ROOM.w, h: ROOM.d, pipes: [], foreign: [] },
+        north: { label: '北壁', w: ROOM.w, h: ROOM.h, pipes: [], foreign: [] },
+        south: { label: '南壁', w: ROOM.w, h: ROOM.h, pipes: [], foreign: [] },
+        east: { label: '東壁', w: ROOM.d, h: ROOM.h, pipes: [], foreign: [] },
+        west: { label: '西壁', w: ROOM.d, h: ROOM.h, pipes: [], foreign: [] },
     };
 
     const GRID_DATA = {
@@ -32,23 +32,23 @@ const RuView = (function() {
     };
 
     const SLIDER_STATE = {
-        floor:   { lower: 0, upper: 1 },
+        floor: { lower: 0, upper: 1 },
         ceiling: { lower: 0, upper: 1 },
-        north:   { lower: 0, upper: 1 },
-        south:   { lower: 0, upper: 1 },
-        east:    { lower: 0, upper: 1 },
-        west:    { lower: 0, upper: 1 },
+        north: { lower: 0, upper: 1 },
+        south: { lower: 0, upper: 1 },
+        east: { lower: 0, upper: 1 },
+        west: { lower: 0, upper: 1 },
     };
 
     const PRESETS = {
-        all:     { lower: 0.00, upper: 1.00 },
+        all: { lower: 0.00, upper: 1.00 },
         surface: { lower: 0.00, upper: 0.30 },
         shallow: { lower: 0.30, upper: 0.65 },
-        deep:    { lower: 0.65, upper: 1.00 },
+        deep: { lower: 0.65, upper: 1.00 },
     };
 
     // render()で使う描画パラメータを保存（ホバー計算用）
-    let lastDrawParams = { offX:0, offY:0, drawW:0, drawH:0, scale:1 };
+    let lastDrawParams = { offX: 0, offY: 0, drawW: 0, drawH: 0, scale: 1 };
 
     let mainCanvas, mainCtx, room3dCanvas;
     let is3DMode = false;
@@ -69,7 +69,7 @@ const RuView = (function() {
         render();
         // foreignAlert クリックでモーダルを開く
         var fa = document.getElementById('foreignAlert');
-        if (fa) fa.addEventListener('click', function(){ openForeignModal(); });
+        if (fa) fa.addEventListener('click', function () { openForeignModal(); });
         addLog('RuView Scan v1.1 起動', 'log-info');
         addLog('モバイルWi-Fiルーターを部屋中心に設置してください', 'log-info');
 
@@ -90,7 +90,7 @@ const RuView = (function() {
     function switchView(view) {
         _saveSliderState();
         currentView = view;
-        document.querySelectorAll('.tab-btn').forEach(function(b) {
+        document.querySelectorAll('.tab-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.view === view);
         });
 
@@ -124,7 +124,7 @@ const RuView = (function() {
     /** Filter toggle */
     function toggleFilter(key) {
         filters[key] = !filters[key];
-        document.querySelectorAll('.filter-btn').forEach(function(b) {
+        document.querySelectorAll('.filter-btn').forEach(function (b) {
             if (b.dataset.filter === key) b.classList.toggle('on', filters[key]);
         });
         if (is3DMode) {
@@ -137,21 +137,66 @@ const RuView = (function() {
     /** Frequency switch */
     function switchFreq(freq) {
         currentFreq = freq;
-        document.querySelectorAll('.freq-btn').forEach(function(b) {
+        document.querySelectorAll('.freq-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.freq === freq);
+        });
+        // 解析モードボタンのアクティブ状態もリセット
+        document.querySelectorAll('.analysis-btn').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.analysis === currentAnalysis);
         });
         if (scanned) _fetchGridForCurrentView();
         render();
     }
 
+
     /** Color map switch */
     function switchColorMap(cmapId) {
         currentColorMap = cmapId;
-        document.querySelectorAll('.cmap-btn').forEach(function(b) {
+        document.querySelectorAll('.cmap-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.cmap === cmapId);
         });
         if (is3DMode) { _update3DTextures(); } else { render(); }
     }
+
+    /** Analysis mode switch */
+    function switchAnalysis(mode) {
+        currentAnalysis = mode;
+        document.querySelectorAll('.analysis-btn').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.analysis === mode);
+        });
+        if (scanned) {
+            // 全6面のグリッドデータを解析モードに合わせて再取得
+            _fetchAllGrids();
+        }
+    }
+
+    async function _fetchAllGrids() {
+        var bandParam;
+        if (currentAnalysis === 'diff') {
+            bandParam = 'diff';
+        } else if (currentAnalysis === 'enhanced') {
+            bandParam = 'enhanced';
+        } else {
+            bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
+        }
+
+        var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
+        var loaded = 0;
+        for (var i = 0; i < faces.length; i++) {
+            try {
+                var resp = await fetch(API + '/result/map/' + faces[i] + '/' + bandParam);
+                if (resp.ok) {
+                    var data = await resp.json();
+                    GRID_DATA[faces[i]] = data.grid;
+                    loaded++;
+                }
+            } catch (e) { /* skip */ }
+        }
+        addLog('解析モード [' + currentAnalysis + ']: ' + loaded + '/6面 更新', 'log-info');
+        if (is3DMode && three3dInitialized) { _update3DTextures(); }
+        render();
+    }
+
 
     /** Depth slider change */
     function onSliderChange() {
@@ -298,7 +343,7 @@ const RuView = (function() {
         for (var _f in VIEW_DATA) { totalP += VIEW_DATA[_f].pipes.length; totalF += VIEW_DATA[_f].foreign.length; }
         console.log('  totalPipes=' + totalP + ', totalForeign=' + totalF);
         var sl3d = { lower: parseFloat(document.getElementById('sliderLower').value), upper: parseFloat(document.getElementById('sliderUpper').value) };
-    Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign, sl3d.lower, sl3d.upper);
+        Room3DView.updateStructures(VIEW_DATA, ROOM, filters.infra, filters.foreign, sl3d.lower, sl3d.upper);
     }
 
     /** Render main canvas */
@@ -318,8 +363,8 @@ const RuView = (function() {
         var scale = drawW / vd.w;
         var scaleX = drawW / vd.w;
         var scaleY = drawH / vd.h;
-        var tx = function(x) { return offX + x * scaleX; };
-        var ty = function(y) { return offY + y * scaleY; };
+        var tx = function (x) { return offX + x * scaleX; };
+        var ty = function (y) { return offY + y * scaleY; };
 
         // ホバー計算用にパラメータ保存
         lastDrawParams.offX = offX;
@@ -339,9 +384,9 @@ const RuView = (function() {
 
         // Scale text
         mainCtx.font = '9px Meiryo'; mainCtx.fillStyle = '#4a6a8a'; mainCtx.textAlign = 'center';
-        mainCtx.fillText(vd.w.toFixed(1) + 'm', offX + drawW/2, offY + drawH + 14);
-        mainCtx.save(); mainCtx.translate(offX - 14, offY + drawH/2);
-        mainCtx.rotate(-Math.PI/2); mainCtx.fillText(vd.h.toFixed(1) + 'm', 0, 0); mainCtx.restore();
+        mainCtx.fillText(vd.w.toFixed(1) + 'm', offX + drawW / 2, offY + drawH + 14);
+        mainCtx.save(); mainCtx.translate(offX - 14, offY + drawH / 2);
+        mainCtx.rotate(-Math.PI / 2); mainCtx.fillText(vd.h.toFixed(1) + 'm', 0, 0); mainCtx.restore();
 
         // View label
         mainCtx.font = '14px Meiryo'; mainCtx.fillStyle = '#4fc3f7'; mainCtx.textAlign = 'left';
@@ -355,7 +400,7 @@ const RuView = (function() {
 
         if (!scanned) {
             mainCtx.font = '16px Meiryo'; mainCtx.fillStyle = '#3a4a6a'; mainCtx.textAlign = 'center';
-            mainCtx.fillText('全 5 箇所の計測後に描画されます', cw/2, ch/2);
+            mainCtx.fillText('全 5 箇所の計測後に描画されます', cw / 2, ch / 2);
             renderRoom3D();
             return;
         }
@@ -466,7 +511,45 @@ const RuView = (function() {
                 addLog('  反射マップ取得開始...', 'log-info');
                 try {
                     var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-                    var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
+                    /** Analysis mode switch */
+                    function switchAnalysis(mode) {
+                        currentAnalysis = mode;
+                        document.querySelectorAll('.analysis-btn').forEach(function (b) {
+                            b.classList.toggle('active', b.dataset.analysis === mode);
+                        });
+                        if (scanned) {
+                            // 全6面のグリッドデータを解析モードに合わせて再取得
+                            _fetchAllGrids();
+                        }
+                    }
+
+                    async function _fetchAllGrids() {
+                        var bandParam;
+                        if (currentAnalysis === 'diff') {
+                            bandParam = 'diff';
+                        } else if (currentAnalysis === 'enhanced') {
+                            bandParam = 'enhanced';
+                        } else {
+                            bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
+                        }
+
+                        var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
+                        var loaded = 0;
+                        for (var i = 0; i < faces.length; i++) {
+                            try {
+                                var resp = await fetch(API + '/result/map/' + faces[i] + '/' + bandParam);
+                                if (resp.ok) {
+                                    var data = await resp.json();
+                                    GRID_DATA[faces[i]] = data.grid;
+                                    loaded++;
+                                }
+                            } catch (e) { /* skip */ }
+                        }
+                        addLog('解析モード [' + currentAnalysis + ']: ' + loaded + '/6面 更新', 'log-info');
+                        if (is3DMode && three3dInitialized) { _update3DTextures(); }
+                        render();
+                    }
+
                     var loaded = 0;
                     for (var i = 0; i < faces.length; i++) {
                         var face = faces[i];
@@ -483,7 +566,7 @@ const RuView = (function() {
                     addLog('  反射マップ取得: ' + loaded + '/6面', loaded === 6 ? 'log-info' : 'log-warn');
                     // 3Dテクスチャ更新
                     if (three3dInitialized) { _update3DTextures(); }
-                } catch(gridErr) {
+                } catch (gridErr) {
                     addLog('  Grid取得エラー: ' + gridErr.message, 'log-warn');
                 }
                 render();
@@ -493,7 +576,7 @@ const RuView = (function() {
                 addLog('  サーバーエラー (' + resp.status + '): ' + errText, 'log-warn');
                 await simulateBuild();
             }
-        } catch(e) {
+        } catch (e) {
             addLog('  API接続失敗: ' + e.message, 'log-warn');
             await simulateBuild();
         } finally {
@@ -503,7 +586,14 @@ const RuView = (function() {
     }
 
     async function _fetchGridForCurrentView() {
-        var bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
+        var bandParam;
+        if (currentAnalysis === 'diff') {
+            bandParam = 'diff';
+        } else if (currentAnalysis === 'enhanced') {
+            bandParam = 'enhanced';
+        } else {
+            bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
+        }
         try {
             var resp = await fetch(API + '/result/map/' + currentView + '/' + bandParam);
             if (resp.ok) {
@@ -511,39 +601,40 @@ const RuView = (function() {
                 GRID_DATA[currentView] = data.grid;
                 render();
             }
-        } catch(e) { /* 取得失敗時は既存データを維持 */ }
+        } catch (e) { /* 取得失敗時は既存データを維持 */ }
     }
 
+
     async function simulateBuild() {
-        var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+        var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
         addLog('  ローカルシミュレーションで3D化...', 'log-info');
         await sleep(500);
 
         var simPipes = {
             floor: [
-                {x1:1,y1:2.5,x2:5.5,y2:2.5,type:'metal',label:'金属管',dispConf:.92,detail:''},
-                {x1:3,y1:1,x2:3,y2:4.5,type:'wire',label:'電気配線',dispConf:.78,detail:''},
-                {x1:5.5,y1:1,x2:5.5,y2:3.8,type:'pvc',label:'塩ビ管',dispConf:.55,detail:''},
+                { x1: 1, y1: 2.5, x2: 5.5, y2: 2.5, type: 'metal', label: '金属管', dispConf: .92, detail: '' },
+                { x1: 3, y1: 1, x2: 3, y2: 4.5, type: 'wire', label: '電気配線', dispConf: .78, detail: '' },
+                { x1: 5.5, y1: 1, x2: 5.5, y2: 3.8, type: 'pvc', label: '塩ビ管', dispConf: .55, detail: '' },
             ],
             ceiling: [
-                {x1:1.5,y1:1,x2:6,y2:1,type:'metal',label:'金属管',dispConf:.87,detail:''},
-                {x1:3.5,y1:0.5,x2:3.5,y2:4.8,type:'wire',label:'電気配線',dispConf:.74,detail:''},
+                { x1: 1.5, y1: 1, x2: 6, y2: 1, type: 'metal', label: '金属管', dispConf: .87, detail: '' },
+                { x1: 3.5, y1: 0.5, x2: 3.5, y2: 4.8, type: 'wire', label: '電気配線', dispConf: .74, detail: '' },
             ],
             north: [
-                {x1:2,y1:0.5,x2:2,y2:2.2,type:'metal',label:'金属管',dispConf:.90,detail:''},
-                {x1:4,y1:1,x2:5.5,y2:1,type:'wire',label:'電気配線',dispConf:.65,detail:''},
+                { x1: 2, y1: 0.5, x2: 2, y2: 2.2, type: 'metal', label: '金属管', dispConf: .90, detail: '' },
+                { x1: 4, y1: 1, x2: 5.5, y2: 1, type: 'wire', label: '電気配線', dispConf: .65, detail: '' },
             ],
-            south: [{x1:1,y1:1,x2:6,y2:1,type:'metal',label:'金属管',dispConf:.88,detail:''}],
+            south: [{ x1: 1, y1: 1, x2: 6, y2: 1, type: 'metal', label: '金属管', dispConf: .88, detail: '' }],
             east: [
-                {x1:1,y1:0.5,x2:1,y2:2.3,type:'pvc',label:'塩ビ管',dispConf:.52,detail:''},
-                {x1:3,y1:.8,x2:3,y2:2,type:'stud',label:'間柱',dispConf:.71,detail:''},
+                { x1: 1, y1: 0.5, x2: 1, y2: 2.3, type: 'pvc', label: '塩ビ管', dispConf: .52, detail: '' },
+                { x1: 3, y1: .8, x2: 3, y2: 2, type: 'stud', label: '間柱', dispConf: .71, detail: '' },
             ],
-            west: [{x1:2,y1:0.3,x2:2,y2:2.5,type:'stud',label:'間柱',dispConf:.68,detail:''}],
+            west: [{ x1: 2, y1: 0.3, x2: 2, y2: 2.5, type: 'stud', label: '間柱', dispConf: .68, detail: '' }],
         };
 
         var simForeign = {
-            floor: [{x:5.8,y:1.2,r:.15,label:'不審デバイス',dispConf:.76,detail:'壁内 深さ≈5cm / 2.4GHz微弱電波源'}],
+            floor: [{ x: 5.8, y: 1.2, r: .15, label: '不審デバイス', dispConf: .76, detail: '壁内 深さ≈5cm / 2.4GHz微弱電波源' }],
             ceiling: [], north: [], south: [], east: [], west: []
         };
 
@@ -585,8 +676,8 @@ const RuView = (function() {
             VIEW_DATA.west.w = ROOM.d; VIEW_DATA.west.h = ROOM.h;
         }
 
-        var typeMap = {metal:'metal', wire:'wire', pvc:'pvc', stud:'stud'};
-        var labelMap = {metal:'金属管', wire:'電気配線', pvc:'塩ビ管', stud:'間柱'};
+        var typeMap = { metal: 'metal', wire: 'wire', pvc: 'pvc', stud: 'stud' };
+        var labelMap = { metal: '金属管', wire: '電気配線', pvc: '塩ビ管', stud: '間柱' };
         for (var f in VIEW_DATA) { VIEW_DATA[f].pipes = []; VIEW_DATA[f].foreign = []; }
 
         if (data.structures) {
@@ -652,17 +743,17 @@ const RuView = (function() {
     function updateForeignAlert() {
         var alertEl = document.getElementById('foreignAlert');
         var listEl = document.getElementById('foreignList');
-        var faceNames = {floor:'床下',ceiling:'天井裏',north:'北壁内',south:'南壁内',east:'東壁内',west:'西壁内'};
-        var threatColors = {high:'#ff1744',medium:'#ff9100',low:'#ffd600',none:'#66bb6a'};
-        var threatLabels = {high:'危険',medium:'警戒',low:'注意',none:'安全'};
-        var methodLabels = {rf:'RF検出',csi:'CSI残差',both:'RF+CSI統合',unknown:'不明'};
+        var faceNames = { floor: '床下', ceiling: '天井裏', north: '北壁内', south: '南壁内', east: '東壁内', west: '西壁内' };
+        var threatColors = { high: '#ff1744', medium: '#ff9100', low: '#ffd600', none: '#66bb6a' };
+        var threatLabels = { high: '危険', medium: '警戒', low: '注意', none: '安全' };
+        var methodLabels = { rf: 'RF検出', csi: 'CSI残差', both: 'RF+CSI統合', unknown: '不明' };
 
         var allForeign = [];
         for (var f in VIEW_DATA) {
             for (var i = 0; i < VIEW_DATA[f].foreign.length; i++) {
                 var fo = VIEW_DATA[f].foreign[i];
                 allForeign.push({
-                    x:fo.x, y:fo.y, label:fo.label, detail:fo.detail, face:f,
+                    x: fo.x, y: fo.y, label: fo.label, detail: fo.detail, face: f,
                     threat_level: fo.threat_level || 'medium',
                     detection_method: fo.detection_method || 'unknown',
                     dispConf: fo.dispConf || 0
@@ -671,14 +762,14 @@ const RuView = (function() {
         }
 
         // 脅威レベルでソート (high → medium → low → none)
-        var threatOrder = {high:0, medium:1, low:2, none:3};
-        allForeign.sort(function(a, b) {
-            return (threatOrder[a.threat_level]||2) - (threatOrder[b.threat_level]||2);
+        var threatOrder = { high: 0, medium: 1, low: 2, none: 3 };
+        allForeign.sort(function (a, b) {
+            return (threatOrder[a.threat_level] || 2) - (threatOrder[b.threat_level] || 2);
         });
 
         if (allForeign.length > 0) {
             alertEl.classList.add('show');
-            listEl.innerHTML = allForeign.map(function(fo) {
+            listEl.innerHTML = allForeign.map(function (fo) {
                 var tc = threatColors[fo.threat_level] || '#ff9100';
                 var tl = threatLabels[fo.threat_level] || '警戒';
                 var ml = methodLabels[fo.detection_method] || '不明';
@@ -688,7 +779,7 @@ const RuView = (function() {
                     '<span style="font-size:8px;color:#888;background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:3px">' + ml + '</span>' +
                     '</div>' +
                     '<div style="font-size:10px;color:#ddd;margin-top:2px">' +
-                    (faceNames[fo.face]||fo.face) + ' (' + fo.x.toFixed(1) + ', ' + fo.y.toFixed(1) + ')m — ' + fo.label +
+                    (faceNames[fo.face] || fo.face) + ' (' + fo.x.toFixed(1) + ', ' + fo.y.toFixed(1) + ')m — ' + fo.label +
                     '</div>' +
                     '<div style="font-size:8px;color:#888;margin-top:1px">' +
                     '信頼度: ' + (fo.dispConf * 100).toFixed(0) + '% | ' + fo.detail +
@@ -698,8 +789,8 @@ const RuView = (function() {
             AudioAlert.playAlert();
 
             // 脅威レベル別カウントをログに表示
-            var highCount = allForeign.filter(function(f){return f.threat_level==='high'}).length;
-            var medCount = allForeign.filter(function(f){return f.threat_level==='medium'}).length;
+            var highCount = allForeign.filter(function (f) { return f.threat_level === 'high' }).length;
+            var medCount = allForeign.filter(function (f) { return f.threat_level === 'medium' }).length;
             addLog('★★★ 異物検出アラート: ' + allForeign.length + '個 (危険:' + highCount + ' / 警戒:' + medCount + ') ★★★', 'log-foreign');
         } else {
             alertEl.classList.remove('show');
@@ -721,17 +812,17 @@ const RuView = (function() {
     function openForeignModal() {
         var modal = document.getElementById('foreignModal');
         var body = document.getElementById('foreignModalBody');
-        var faceNames = {floor:'床下',ceiling:'天井裏',north:'北壁内',south:'南壁内',east:'東壁内',west:'西壁内'};
-        var threatColors = {high:'#ff1744',medium:'#ff9100',low:'#ffd600'};
-        var threatLabels = {high:'危険',medium:'警戒',low:'注意'};
-        var methodLabels = {rf:'RF検出',csi:'CSI残差検出',both:'RF+CSI統合検出',unknown:'不明'};
+        var faceNames = { floor: '床下', ceiling: '天井裏', north: '北壁内', south: '南壁内', east: '東壁内', west: '西壁内' };
+        var threatColors = { high: '#ff1744', medium: '#ff9100', low: '#ffd600' };
+        var threatLabels = { high: '危険', medium: '警戒', low: '注意' };
+        var methodLabels = { rf: 'RF検出', csi: 'CSI残差検出', both: 'RF+CSI統合検出', unknown: '不明' };
 
         var allForeign = [];
         for (var f in VIEW_DATA) {
             for (var i = 0; i < VIEW_DATA[f].foreign.length; i++) {
                 var fo = VIEW_DATA[f].foreign[i];
                 allForeign.push({
-                    x:fo.x, y:fo.y, r:fo.r, label:fo.label, detail:fo.detail, face:f,
+                    x: fo.x, y: fo.y, r: fo.r, label: fo.label, detail: fo.detail, face: f,
                     threat_level: fo.threat_level || 'medium',
                     detection_method: fo.detection_method || 'unknown',
                     dispConf: fo.dispConf || 0
@@ -739,8 +830,8 @@ const RuView = (function() {
             }
         }
 
-        var threatOrder = {high:0, medium:1, low:2, none:3};
-        allForeign.sort(function(a,b){ return (threatOrder[a.threat_level]||2) - (threatOrder[b.threat_level]||2); });
+        var threatOrder = { high: 0, medium: 1, low: 2, none: 3 };
+        allForeign.sort(function (a, b) { return (threatOrder[a.threat_level] || 2) - (threatOrder[b.threat_level] || 2); });
 
         if (allForeign.length === 0) {
             body.innerHTML = '<div style="text-align:center;color:#6a7a8a;padding:40px;font-size:14px">不審デバイスは検出されていません</div>';
@@ -749,9 +840,9 @@ const RuView = (function() {
         }
 
         // サマリー
-        var highC = allForeign.filter(function(f){return f.threat_level==='high'}).length;
-        var medC = allForeign.filter(function(f){return f.threat_level==='medium'}).length;
-        var lowC = allForeign.filter(function(f){return f.threat_level==='low'}).length;
+        var highC = allForeign.filter(function (f) { return f.threat_level === 'high' }).length;
+        var medC = allForeign.filter(function (f) { return f.threat_level === 'medium' }).length;
+        var lowC = allForeign.filter(function (f) { return f.threat_level === 'low' }).length;
 
         var html = '<div class="fm-summary">';
         html += '<div class="fm-summary-item"><strong style="color:#eee;font-size:14px">' + allForeign.length + ' 件検出</strong></div>';
@@ -804,7 +895,7 @@ const RuView = (function() {
         _restoreSliderState();
 
         document.getElementById('foreignAlert').classList.remove('show');
-        document.querySelectorAll('.tab-btn .badge').forEach(function(b) { b.classList.add('hidden'); });
+        document.querySelectorAll('.tab-btn .badge').forEach(function (b) { b.classList.add('hidden'); });
         document.getElementById('valW').textContent = '—';
         document.getElementById('valD').textContent = '—';
         document.getElementById('valH').textContent = '—';
@@ -839,7 +930,7 @@ const RuView = (function() {
         ScanControl.resetPoints();
         render();
         addLog('=== セッションリセット ===', 'log-warn');
-        fetch(API + '/reset', { method: 'POST' }).catch(function(){});
+        fetch(API + '/reset', { method: 'POST' }).catch(function () { });
     }
 
     /** Log */
@@ -868,8 +959,8 @@ const RuView = (function() {
     /** F-0l: システムステータスを取得してログに表示 */
     function _fetchSystemStatus() {
         fetch('/api/system/status')
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
                 var mode = d.simulation_mode ? 'シミュレーション' : '実機スキャン';
                 var src = d.csi_source || 'unknown';
                 var nic = d.nic_detected ? d.nic_name : '未検出';
@@ -886,7 +977,7 @@ const RuView = (function() {
                 }
                 addLog('----------------------------', 'log-info');
             })
-            .catch(function(e) {
+            .catch(function (e) {
                 addLog('システムステータス取得失敗: ' + e, 'log-error');
             });
     }
@@ -894,7 +985,8 @@ const RuView = (function() {
     return {
         switchView: switchView, toggleFilter: toggleFilter, switchFreq: switchFreq,
         exportPDF: exportPDF, exportCSV: exportCSV,
-        switchColorMap: switchColorMap, buildResult: buildResult, resetAll: resetAll,
+        switchColorMap: switchColorMap, switchAnalysis: switchAnalysis,
+        buildResult: buildResult, resetAll: resetAll,
         addLog: addLog, render: render, confirmRoom: confirmRoom, isRoomReady: isRoomReady,
         onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset,
         openForeignModal: openForeignModal, closeForeignModal: closeForeignModal

@@ -248,11 +248,6 @@ async def build_result(
 
             rmap_gen = ReflectionMapGenerator(state.room_dims)
             maps = rmap_gen.generate(session)
-            # face_band キーでキャッシュ保存 (Phase D)
-            state.reflection_maps = {}
-            for face_key, rmap in maps.items():
-                state.reflection_maps[face_key] = rmap                    # 後方互換: faceキー
-                state.reflection_maps[f"{face_key}_mix"] = rmap          # band付きキー
 
             # 3. 構造物検出 (Phase B)
             from src.scan.structure_detector import StructureDetector
@@ -328,7 +323,7 @@ async def get_room():
 async def get_reflection_map(face: str, band: str):
     """反射マップを返す (Phase D: 160MHz対応、オンデマンド生成)"""
     valid_faces = {'floor', 'ceiling', 'north', 'south', 'east', 'west'}
-    valid_bands = {'mix', '24', '5', '160'}
+    valid_bands = {'mix', '24', '5', '160', 'diff', 'enhanced'}
     if face not in valid_faces:
         raise HTTPException(400, detail=f"Invalid face: {face}. Valid: {valid_faces}")
     if band not in valid_bands:
@@ -478,3 +473,58 @@ async def get_system_status():
         resp.nic_name = "未検出"
 
     return resp
+
+# ===== Scenario Test (シミュレーション専用) =====
+
+class ScenarioRequest(BaseModel):
+    """シナリオ注入リクエスト"""
+    room: dict
+    router: dict = {}
+    structures: list = []
+    foreign_objects: list = []
+    simulation: dict = {}
+
+
+@router.post("/test/load-scenario")
+async def load_scenario(req: ScenarioRequest):
+    """
+    シミュレーションモード専用: シナリオデータを SimulatedAdapter に注入
+
+    実運用モード (FeitCSI) では使用不可。
+    """
+    from src.csi.adapter import SimulatedAdapter
+
+    # SimulatedAdapter であることを確認
+    if not isinstance(state.csi_adapter, SimulatedAdapter):
+        raise HTTPException(
+            400,
+            detail="シナリオ注入はシミュレーションモード専用です。"
+                   " '--simulate' オプションで起動してください。"
+        )
+
+    try:
+        # SimulatedAdapter にシナリオを注入
+        state.csi_adapter.load_scenario({
+            "room": req.room,
+            "router": req.router,
+            "structures": req.structures,
+            "foreign_objects": req.foreign_objects,
+            "simulation": req.simulation,
+        })
+
+        # ScanManager もリセット
+        if state.scan_manager:
+            state.scan_manager.reset()
+
+        # RoomEstimator の再構成は不要（buildResult時にToFから再推定）
+
+        return {
+            "status": "ok",
+            "room_dims": f"{req.room.get('width')}×{req.room.get('depth')}×{req.room.get('height')}m",
+            "structure_count": len(req.structures),
+            "foreign_count": len(req.foreign_objects),
+        }
+
+    except Exception as e:
+        logger.error(f"シナリオ注入エラー: {e}", exc_info=True)
+        raise HTTPException(500, detail=str(e))

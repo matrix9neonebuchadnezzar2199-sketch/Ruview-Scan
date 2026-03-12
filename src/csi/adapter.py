@@ -266,6 +266,78 @@ class SimulatedAdapter(CSIAdapter):
         self.num_sc = num_subcarriers
         self._frame_count = 0
 
+    def load_scenario(self, scenario_data: dict):
+        """
+        外部シナリオデータからシミュレーション物理モデルを差し替える
+
+        Parameters:
+            scenario_data: {
+                "room": {"width": float, "depth": float, "height": float},
+                "router": {"x": float, "y": float, "z": float},
+                "structures": [{"x": float, "y": float, "z": float, "type": str, "intensity": float, "radius": float}, ...],
+                "foreign_objects": [{"x": float, "y": float, "z": float, "intensity": float, "radius": float}, ...],
+                "simulation": {"noise_floor_dbm": float, "wall_reflection_coefficients": dict},
+            }
+        """
+        # 部屋寸法の差し替え
+        room = scenario_data.get("room", {})
+        w = room.get("width", self.room_dims[0])
+        d = room.get("depth", self.room_dims[1])
+        h = room.get("height", self.room_dims[2])
+        self.room_dims = (w, d, h)
+        logger.info(f"シナリオ注入: 部屋寸法 {w}×{d}×{h}m")
+
+        # ルーター位置の差し替え
+        router = scenario_data.get("router", {})
+        self._router_pos = (
+            router.get("x", w / 2),
+            router.get("y", d / 2),
+            router.get("z", 0.8),
+        )
+        logger.info(f"シナリオ注入: ルーター位置 {self._router_pos}")
+
+        # 散乱体リストの差し替え（構造物 + 異物を統合）
+        new_scatterers = []
+
+        for s in scenario_data.get("structures", []):
+            new_scatterers.append((
+                s.get("x", 0.0),
+                s.get("y", 0.0),
+                s.get("z", 0.0),
+                s.get("type", "metal"),
+                s.get("radius", 0.10),
+            ))
+
+        for f in scenario_data.get("foreign_objects", []):
+            new_scatterers.append((
+                f.get("x", 0.0),
+                f.get("y", 0.0),
+                f.get("z", 0.0),
+                "device",
+                f.get("radius", 0.05),
+            ))
+
+        # クラス変数ではなくインスタンス変数として上書き
+        self.PIPE_SCATTERERS = new_scatterers
+        logger.info(f"シナリオ注入: 散乱体 {len(new_scatterers)}個")
+
+        # 壁反射係数の差し替え
+        sim_cfg = scenario_data.get("simulation", {})
+        wall_coeffs = sim_cfg.get("wall_reflection_coefficients", {})
+        if wall_coeffs:
+            self._wall_coefficients = wall_coeffs
+            logger.info(f"シナリオ注入: 壁反射係数カスタム設定")
+        else:
+            self._wall_coefficients = None
+
+        # 現在の計測点位置を再計算
+        self._position = self._point_to_position(self.point_id)
+        self._frame_count = 0
+
+        logger.info("シナリオ注入完了")
+
+
+
     def _build_multipath_components(self) -> list:
         """
         計測点とルーター位置に基づくマルチパス成分を構築
@@ -280,6 +352,10 @@ class SimulatedAdapter(CSIAdapter):
 
         paths = []
 
+        # 壁反射係数（シナリオ注入時はカスタム値を使用）
+        wc = getattr(self, '_wall_coefficients', None) or {}
+
+
         # 0. 直接波: PC ↔ ルーター
         d_direct = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-rz)**2)
         paths.append((d_direct, 1.0, 'direct'))
@@ -287,27 +363,27 @@ class SimulatedAdapter(CSIAdapter):
         # 1. 壁反射 (鏡像法: ルーターの鏡像からPCまでの距離)
         # 北壁 (y=0): ルーターのy鏡像 = -ry
         d_north = np.sqrt((px-rx)**2 + (py-(-ry))**2 + (pz-rz)**2)
-        paths.append((d_north, 0.65, 'north_wall'))
+        paths.append((d_north, wc.get('north', 0.65), 'north_wall'))
 
         # 南壁 (y=d): ルーターのy鏡像 = 2d - ry
         d_south = np.sqrt((px-rx)**2 + (py-(2*d-ry))**2 + (pz-rz)**2)
-        paths.append((d_south, 0.65, 'south_wall'))
+        paths.append((d_south, wc.get('south', 0.65), 'south_wall'))
 
         # 西壁 (x=0): ルーターのx鏡像 = -rx
         d_west = np.sqrt(((-rx)-px)**2 + (py-ry)**2 + (pz-rz)**2)
-        paths.append((d_west, 0.60, 'west_wall'))
+        paths.append((d_west, wc.get('west', 0.60), 'west_wall'))
 
         # 東壁 (x=w): ルーターのx鏡像 = 2w - rx
         d_east = np.sqrt(((2*w-rx)-px)**2 + (py-ry)**2 + (pz-rz)**2)
-        paths.append((d_east, 0.60, 'east_wall'))
+        paths.append((d_east, wc.get('east', 0.60), 'east_wall'))
 
         # 天井 (z=h): ルーターのz鏡像 = 2h - rz
         d_ceil = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-(2*h-rz))**2)
-        paths.append((d_ceil, 0.50, 'ceiling'))
+        paths.append((d_ceil, wc.get('ceiling', 0.50), 'ceiling'))
 
         # 床 (z=0): ルーターのz鏡像 = -rz
         d_floor = np.sqrt((px-rx)**2 + (py-ry)**2 + (pz-(-rz))**2)
-        paths.append((d_floor, 0.50, 'floor'))
+        paths.append((d_floor, wc.get('floor', 0.50), 'floor'))
 
         # 2. 配管・配線の散乱
         for (sx, sy, sz, material, rad) in self.PIPE_SCATTERERS:
@@ -316,7 +392,8 @@ class SimulatedAdapter(CSIAdapter):
             d_scat_rt = np.sqrt((rx-sx)**2 + (ry-sy)**2 + (rz-sz)**2)
             d_total = d_pc_scat + d_scat_rt
             # 材質による反射強度
-            amp = {'metal': 0.45, 'wire': 0.20, 'pvc': 0.15}.get(material, 0.10)
+            amp = {'metal': 0.45, 'wire': 0.20, 'pvc': 0.15, 'stud': 0.10, 'device': 0.35}.get(material, 0.10)
+
             # 距離減衰
             amp *= min(1.0, 2.0 / max(d_total, 0.5))
             paths.append((d_total, amp, f'pipe_{material}'))

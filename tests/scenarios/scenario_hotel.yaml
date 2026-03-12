@@ -1,0 +1,93 @@
+# ==============================================================
+# RuView Scan - シミュレーションシナリオ定義
+# scenario_hotel.yaml: ホテル客室 (TSCM用途)
+# ==============================================================
+
+scenario:
+  name: "ホテル客室 (TSCM調査)"
+  description: "4.5m×3.8mのホテル客室。盗聴器2個を想定した調査シナリオ"
+
+room:
+  width: 4.5
+  depth: 3.8
+  height: 2.5
+
+router:
+  x: 2.25
+  y: 1.9
+  z: 0.8
+
+structures:
+  # --- 床下 ---
+  - face: floor
+    type: metal
+    label: "給水管"
+    x: 1.0
+    y: 1.9
+    z: -0.10
+    intensity: 0.40
+    radius: 0.12
+
+  # --- 天井裏 ---
+  - face: ceiling
+    type: wire
+    label: "天井裏配線"
+    x: 2.0
+    y: 2.0
+    z: 2.60
+    intensity: 0.18
+    radius: 0.06
+
+  # --- 壁内 ---
+  - face: north
+    type: wire
+    label: "壁内電気配線"
+    x: 3.0
+    y: -0.05
+    z: 1.2
+    intensity: 0.20
+    radius: 0.06
+
+  - face: west
+    type: pvc
+    label: "排水管 (バスルーム隣接)"
+    x: -0.10
+    y: 1.0
+    z: 1.0
+    intensity: 0.15
+    radius: 0.10
+
+foreign_objects:
+  - face: ceiling
+    label: "天井裏 隠しカメラ (疑い)"
+    detail: "天井点検口付近 / 5GHz微弱電波+赤外線LED"
+    x: 2.8
+    y: 1.5
+    z: 2.55
+    intensity: 0.30
+    radius: 0.05
+    threat_level: high
+    signal_type: "5GHz_beacon"
+    power_dbm: -70
+
+  - face: east
+    label: "壁面コンセント内 盗聴器 (疑い)"
+    detail: "東壁コンセント裏 / 2.4GHz間欠送信"
+    x: 4.55
+    y: 2.5
+    z: 0.30
+    intensity: 0.25
+    radius: 0.04
+    threat_level: high
+    signal_type: "2.4GHz_burst"
+    power_dbm: -60
+
+simulation:
+  noise_floor_dbm: -88
+  wall_reflection_coefficients:
+    north: 0.70
+    south: 0.70
+    east: 0.65
+    west: 0.65
+    ceiling: 0.55
+    floor: 0.55

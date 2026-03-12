@@ -1,0 +1,140 @@
+# ==============================================================
+# RuView Scan - シミュレーションシナリオ定義
+# scenario_office.yaml: 一般的なオフィス
+# ==============================================================
+#
+# 使い方:
+#   1. ツール起動:  python src/main.py --simulate
+#   2. 注入実行:    python tests/inject_scenario.py --scenario tests/scenarios/scenario_office.yaml
+#   3. ブラウザ:    http://127.0.0.1:8080 で結果確認
+#
+# 座標系:
+#   原点 = 部屋の北西下角
+#   x = 東方向 (0 → width)
+#   y = 南方向 (0 → depth)
+#   z = 上方向 (0 → height)
+#
+# 構造物の type:
+#   metal  = 金属管 (給水管・ガス管等)    反射強度: 高
+#   wire   = 電気配線 (VVFケーブル等)     反射強度: 中
+#   pvc    = 塩ビ管 (排水管等)            反射強度: 中〜低
+#   stud   = 間柱 (木材・軽鉄)           反射強度: 低
+# ==============================================================
+
+scenario:
+  name: "一般的なオフィス"
+  description: "7.2m×5.4mのオフィス。金属管2本、電気配線2本、塩ビ管1本、間柱2本、不審デバイス1個"
+
+room:
+  width: 7.2
+  depth: 5.4
+  height: 2.7
+
+# ルーター位置 (Wi-Fiアクセスポイント = 送信元)
+router:
+  x: 3.6        # 部屋中央
+  y: 2.7        # 部屋中央
+  z: 0.8        # テーブル上
+
+# 壁面内部の構造物（散乱体としてSimulatedAdapterに注入される）
+structures:
+  # --- 床下 ---
+  - face: floor
+    type: metal
+    label: "給水管 (東西方向)"
+    x: 1.0
+    y: 2.5
+    z: -0.10       # 床面より10cm下 (負の値 = 床下)
+    intensity: 0.45
+    radius: 0.15
+
+  - face: floor
+    type: wire
+    label: "電気配線 (南北方向)"
+    x: 3.0
+    y: 1.5
+    z: -0.05
+    intensity: 0.20
+    radius: 0.08
+
+  - face: floor
+    type: pvc
+    label: "排水管 (東壁沿い)"
+    x: 5.5
+    y: 1.5
+    z: -0.12
+    intensity: 0.15
+    radius: 0.10
+
+  # --- 天井裏 ---
+  - face: ceiling
+    type: metal
+    label: "空調ダクト"
+    x: 3.5
+    y: 1.0
+    z: 2.80        # 天井面より10cm上
+    intensity: 0.40
+    radius: 0.20
+
+  - face: ceiling
+    type: wire
+    label: "天井裏配線"
+    x: 3.5
+    y: 3.5
+    z: 2.75
+    intensity: 0.18
+    radius: 0.06
+
+  # --- 北壁内 ---
+  - face: north
+    type: metal
+    label: "給水立管"
+    x: 2.0
+    y: -0.08       # 壁面内 (負 = 壁の向こう側)
+    z: 1.3
+    intensity: 0.42
+    radius: 0.12
+
+  # --- 東壁内 ---
+  - face: east
+    type: stud
+    label: "間柱1"
+    x: 7.30         # 壁面内
+    y: 2.0
+    z: 1.35
+    intensity: 0.10
+    radius: 0.05
+
+  - face: east
+    type: stud
+    label: "間柱2"
+    x: 7.30
+    y: 3.5
+    z: 1.35
+    intensity: 0.10
+    radius: 0.05
+
+# 不審デバイス（異物として検知されるべきもの）
+foreign_objects:
+  - face: floor
+    label: "不審な無線デバイス"
+    detail: "壁内 深さ≈5cm / 2.4GHz微弱電波源"
+    x: 5.8
+    y: 1.2
+    z: -0.05
+    intensity: 0.35
+    radius: 0.08
+    threat_level: high
+    signal_type: "2.4GHz_beacon"
+    power_dbm: -65
+
+# シミュレーション物理パラメータ
+simulation:
+  noise_floor_dbm: -90
+  wall_reflection_coefficients:
+    north: 0.65
+    south: 0.65
+    east: 0.60
+    west: 0.60
+    ceiling: 0.50
+    floor: 0.50

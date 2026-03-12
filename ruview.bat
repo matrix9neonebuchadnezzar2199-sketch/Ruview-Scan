@@ -1,45 +1,98 @@
 @echo off
-REM =============================================================================
-REM RuView Scan - Windows起動スクリプト
-REM =============================================================================
+chcp 65001 > nul
+title RuView Scan - Launcher
 
-cd /d "%~dp0"
+echo ========================================
+echo   RuView Scan v1.0 - Launcher
+echo ========================================
+echo.
+echo   1. シミュレーションモード (NIC不要・Windows対応)
+echo   2. 実運用モード (FeitCSI + AX210・Linux専用)
+echo   3. 実運用モード - セットアップスキップ
+echo   4. シナリオテスト (シミュレーション + 自動注入)
+echo   0. 終了
+echo.
+set /p choice="選択してください (0-4): "
 
-set HOST=127.0.0.1
-set PORT=8080
-set SIMULATE=
-set LOG_LEVEL=INFO
-
-:parse_args
-if "%~1"=="" goto :start
-if "%~1"=="--simulate" (set SIMULATE=--simulate & shift & goto :parse_args)
-if "%~1"=="--host" (set HOST=%~2 & shift & shift & goto :parse_args)
-if "%~1"=="--port" (set PORT=%~2 & shift & shift & goto :parse_args)
-if "%~1"=="--debug" (set LOG_LEVEL=DEBUG & shift & goto :parse_args)
-if "%~1"=="--help" (
-    echo Usage: ruview.bat [options]
-    echo   --simulate    シミュレーションモードで起動
-    echo   --host HOST   リッスンアドレス ^(default: 127.0.0.1^)
-    echo   --port PORT   リッスンポート ^(default: 8080^)
-    echo   --debug       デバッグログを有効化
-    exit /b 0
+if "%choice%"=="1" (
+    echo.
+    echo [INFO] シミュレーションモードで起動します...
+    echo [INFO] ブラウザで http://127.0.0.1:8080 を開いてください
+    echo.
+    python src/main.py --simulate
+    goto :end
 )
-shift
-goto :parse_args
 
-:start
-REM 仮想環境
-if exist "venv\Scripts\activate.bat" call venv\Scripts\activate.bat
-if exist ".venv\Scripts\activate.bat" call .venv\Scripts\activate.bat
+if "%choice%"=="2" (
+    echo.
+    echo [INFO] 実運用モードで起動します (root権限が必要です)
+    echo [WARN] このモードは Linux + AX210 NIC が必要です
+    echo.
+    python src/main.py
+    goto :end
+)
 
-set PYTHONPATH=%~dp0;%PYTHONPATH%
+if "%choice%"=="3" (
+    echo.
+    echo [INFO] 実運用モード (セットアップスキップ) で起動します...
+    echo.
+    python src/main.py --skip-setup
+    goto :end
+)
 
-echo ==============================================
-echo  RuView Scan v1.0
-echo ==============================================
-echo  Host: %HOST%:%PORT%
-echo  Simulate: %SIMULATE%
-echo  Log Level: %LOG_LEVEL%
-echo ==============================================
+if "%choice%"=="4" (
+    echo.
+    echo --- シナリオ選択 ---
+    echo.
 
-python -m src.main --host %HOST% --port %PORT% --log-level %LOG_LEVEL% %SIMULATE%
+    setlocal enabledelayedexpansion
+    set idx=0
+    for %%f in (tests\scenarios\*.yaml) do (
+        set /a idx+=1
+        set "file_!idx!=%%f"
+        echo   !idx!. %%~nf
+    )
+
+    if !idx!==0 (
+        echo [ERROR] tests\scenarios\ にYAMLファイルが見つかりません
+        goto :end
+    )
+
+    echo.
+    set /p schoice="シナリオ番号を選択: "
+    set "selected=!file_%schoice%!"
+
+    if "!selected!"=="" (
+        echo [ERROR] 無効な選択です
+        goto :end
+    )
+
+    echo.
+    echo [INFO] シミュレーションモードで起動します...
+    echo [INFO] 起動完了後、シナリオを自動注入します...
+    echo.
+
+    start "RuView Scan Server" cmd /c "chcp 65001 > nul && python src/main.py --simulate"
+
+    echo [INFO] サーバー起動待ち (10秒)...
+    timeout /t 10 /nobreak > nul
+
+    echo [INFO] シナリオ注入: !selected!
+    python tests/inject_scenario.py --scenario "!selected!"
+
+    echo.
+    echo [INFO] ブラウザで http://127.0.0.1:8080 を開いてください
+    endlocal
+    goto :end
+)
+
+if "%choice%"=="0" (
+    echo 終了します。
+    goto :end
+)
+
+echo [ERROR] 無効な選択です。
+
+:end
+echo.
+pause

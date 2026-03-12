@@ -114,6 +114,57 @@ class ReflectionMapGenerator:
                 f"max={grid.max():.3f}, active(>=0.3)={n_active}cells"
             )
 
+        # === 背景差分マップの生成 ===
+        # 散乱体なしのベースライン（壁反射のみ）を計算し、差分を取る
+        try:
+            baseline_amplitudes = self._extract_baseline_amplitudes(point_amplitudes)
+            
+            for face in self.FACE_SPECS:
+                fw, fh = self._get_face_dimensions(face)
+                
+                # ベースラインマップ（壁反射のみの寄与）
+                baseline_grid, _, _ = self._build_face_grid(face, baseline_amplitudes)
+                if baseline_grid.max() > 0:
+                    baseline_grid = baseline_grid / baseline_grid.max()
+                baseline_grid = gaussian_filter(baseline_grid, sigma=self.gaussian_sigma)
+                if baseline_grid.max() > 0:
+                    baseline_grid = baseline_grid / baseline_grid.max()
+
+                # 差分マップ: 通常 - ベースライン
+                raw_grid = maps[face].grid
+                diff_grid = np.clip(raw_grid - baseline_grid * 0.85, 0.0, None)
+                if diff_grid.max() > 0:
+                    diff_grid = diff_grid / diff_grid.max()
+
+                maps[f"{face}_diff"] = ReflectionMap(
+                    face=face,
+                    width_m=fw,
+                    height_m=fh,
+                    grid=diff_grid,
+                    resolution=self.grid_resolution,
+                    band=f"{band}_diff",
+                )
+
+                # 構造物強調マップ: 差分 + コントラスト強調 (ガンマ補正)
+                enhanced_grid = np.power(diff_grid, 0.5)  # ガンマ0.5で暗部を持ち上げ
+                if enhanced_grid.max() > 0:
+                    enhanced_grid = enhanced_grid / enhanced_grid.max()
+
+                maps[f"{face}_enhanced"] = ReflectionMap(
+                    face=face,
+                    width_m=fw,
+                    height_m=fh,
+                    grid=enhanced_grid,
+                    resolution=self.grid_resolution,
+                    band=f"{band}_enhanced",
+                )
+
+            logger.info("背景差分マップ・構造物強調マップ生成完了")
+
+        except Exception as e:
+            logger.warning(f"背景差分マップ生成失敗（通常マップは正常）: {e}")
+
+
             maps[face] = ReflectionMap(
                 face=face,
                 width_m=fw,
@@ -162,6 +213,55 @@ class ReflectionMapGenerator:
                 )
 
         return point_amplitudes
+
+    def _extract_baseline_amplitudes(
+        self, point_amplitudes: Dict[str, List[float]]
+    ) -> Dict[str, List[float]]:
+        """
+        背景ベースライン用の振幅を生成。
+
+        各計測点の振幅分布から「安定成分」（=壁反射）のみを抽出する。
+        壁反射は時間的に安定（分散小）、散乱体は位置依存で変動が大きい。
+        
+        方法: 各計測点の振幅から分散成分を除去し、中央値のみを残す。
+        これにより直接波+壁反射のベースラインが得られる。
+
+        Returns:
+            { point_id: [baseline_amp, baseline_amp, ...] }  (全フレーム同値)
+        """
+        baseline = {}
+
+        for point_id, amps in point_amplitudes.items():
+            if not amps:
+                continue
+
+            # 中央値 = 安定成分（直接波 + 壁反射）
+            median_amp = float(np.median(amps))
+
+            # 分散の小さいフレーム（=壁反射が支配的）のみ抽出
+            amp_array = np.array(amps)
+            std = np.std(amp_array)
+
+            # 中央値 ± 0.5σ 以内のフレームのみ → 安定成分
+            mask = np.abs(amp_array - median_amp) < (std * 0.5 + 1e-9)
+            stable_amps = amp_array[mask]
+
+            if len(stable_amps) > 0:
+                baseline_val = float(np.mean(stable_amps))
+            else:
+                baseline_val = median_amp
+
+            # 全フレーム数分の同値リストとして返す（_build_face_grid互換）
+            baseline[point_id] = [baseline_val] * len(amps)
+
+            logger.debug(
+                f"  ベースライン {point_id}: "
+                f"median={median_amp:.4f}, baseline={baseline_val:.4f}, "
+                f"stable_ratio={len(stable_amps)}/{len(amps)}"
+            )
+
+        return baseline
+
 
     def _build_face_grid(
         self, face: str, point_amplitudes: Dict[str, List[float]]

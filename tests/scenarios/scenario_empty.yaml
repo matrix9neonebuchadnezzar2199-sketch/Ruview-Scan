@@ -1,0 +1,36 @@
+# ==============================================================
+# RuView Scan - シミュレーションシナリオ定義
+# scenario_empty.yaml: 空の部屋 (ベースライン検証用)
+# ==============================================================
+#
+# 構造物・異物なしの完全な空部屋。
+# 壁反射のみでヒートマップがどう表示されるかのベースラインとして使用。
+# 実測前に「何もない状態」のノイズフロアを確認するために有用。
+
+scenario:
+  name: "空部屋 (ベースライン)"
+  description: "6畳和室相当の空部屋。構造物なし。壁反射のみのベースライン確認用"
+
+room:
+  width: 3.6
+  depth: 2.7
+  height: 2.4
+
+router:
+  x: 1.8
+  y: 1.35
+  z: 0.8
+
+structures: []
+
+foreign_objects: []
+
+simulation:
+  noise_floor_dbm: -92
+  wall_reflection_coefficients:
+    north: 0.60
+    south: 0.60
+    east: 0.55
+    west: 0.55
+    ceiling: 0.45
+    floor: 0.45

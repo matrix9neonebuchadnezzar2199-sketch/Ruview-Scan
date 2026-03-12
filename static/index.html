@@ -1,181 +1,239 @@
 ﻿<!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RuView Scan - 6-Face Room Scanner</title>
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RuView Scan - 6-Face Room Scanner</title>
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body>
 
-<div class="header">
-  <div>
-    <h1>RUVIEW SCAN</h1>
-    <div class="sub">Stage 1 — 6-Face Room Scanner / 1 Router + 1 Laptop / 5-Point Sequential</div>
-  </div>
-  <div class="status-bar">
-    <span>TX: <span class="active">Mobile Wi-Fi (center)</span></span>
-    <span>RX: <span class="active">AX210 Laptop</span></span>
-    <span>検出限界: <span class="active">≈ 3cm(金属) / 5cm(非金属)</span></span>
-  </div>
-</div>
-
-<div class="main">
-  <!-- LEFT: Main view -->
-  <div class="panel view-panel">
-    <div class="tab-bar" id="tabBar">
-      <div class="tab-btn active" data-view="floor" onclick="RuView.switchView('floor')">⬜ 床面<span class="badge hidden" id="badge-floor"></span></div>
-      <div class="tab-btn" data-view="ceiling" onclick="RuView.switchView('ceiling')">⬛ 天井<span class="badge hidden" id="badge-ceiling"></span></div>
-      <div class="tab-btn" data-view="north" onclick="RuView.switchView('north')">▲ 北壁<span class="badge hidden" id="badge-north"></span></div>
-      <div class="tab-btn" data-view="south" onclick="RuView.switchView('south')">▼ 南壁<span class="badge hidden" id="badge-south"></span></div>
-      <div class="tab-btn" data-view="east" onclick="RuView.switchView('east')">▶ 東壁<span class="badge hidden" id="badge-east"></span></div>
-      <div class="tab-btn" data-view="west" onclick="RuView.switchView('west')">◀ 西壁<span class="badge hidden" id="badge-west"></span></div>
-      <div class="tab-btn" data-view="3d" onclick="RuView.switchView('3d')">🧊 3D</div>
+  <div class="header">
+    <div>
+      <h1>RUVIEW SCAN</h1>
+      <div class="sub">Stage 1 — 6-Face Room Scanner / 1 Router + 1 Laptop / 5-Point Sequential</div>
     </div>
-    <div class="controls-row">
-      <div class="filter-bar">
-        <div class="filter-btn" data-filter="infra" onclick="RuView.toggleFilter('infra')"><div class="dot" style="background:#4fc3f7"></div>配管・配線</div>
-        <div class="filter-btn on" data-filter="foreign" onclick="RuView.toggleFilter('foreign')"><div class="dot" style="background:#ff1744"></div>異物</div>
-        <div class="filter-btn on" data-filter="heatmap" onclick="RuView.toggleFilter('heatmap')"><div class="dot" style="background:rgba(150,100,200,.6)"></div>ヒートマップ</div>
-      </div>
-      <div class="sep"></div>
-      <div class="freq-bar">
-        <div class="freq-btn active" data-freq="mix" onclick="RuView.switchFreq('mix')">Mix</div>
-        <div class="freq-btn" data-freq="24" onclick="RuView.switchFreq('24')">2.4G</div>
-        <div class="freq-btn" data-freq="5" onclick="RuView.switchFreq('5')">5G</div>
-        <div class="freq-btn" data-freq="160" onclick="RuView.switchFreq('160')">160M</div>
-      </div>
-      <div class="sep"></div>
-      <div class="cmap-bar">
-        <div class="cmap-btn active" data-cmap="thermal" onclick="RuView.switchColorMap('thermal')">サーマル</div>
-        <div class="cmap-btn" data-cmap="heat" onclick="RuView.switchColorMap('heat')">ヒート</div>
-        <div class="cmap-btn" data-cmap="cool" onclick="RuView.switchColorMap('cool')">クール</div>
-        <div class="cmap-btn" data-cmap="grayscale" onclick="RuView.switchColorMap('grayscale')">グレー</div>
-        <div class="cmap-btn" data-cmap="rainbow" onclick="RuView.switchColorMap('rainbow')">虹</div>
-      </div>
-      <div class="sep"></div>
-      <div class="preset-bar">
-      </div>
-    </div>
-    <div class="slider-row">
-      <div class="slider-group">
-        <label class="slider-label">下限 <span id="sliderLowerVal">0.00</span></label>
-        <input type="range" id="sliderLower" class="depth-slider" min="0" max="100" value="0" oninput="RuView.onSliderChange()">
-      </div>
-      <div class="slider-group">
-        <label class="slider-label">上限 <span id="sliderUpperVal">1.00</span></label>
-        <input type="range" id="sliderUpper" class="depth-slider" min="0" max="100" value="100" oninput="RuView.onSliderChange()">
-      </div>
-      <div class="slider-group slider-group-sm">
-        <label class="slider-label">不透明度 <span id="sliderOpacityVal">100%</span></label>
-        <input type="range" id="sliderOpacity" class="depth-slider opacity-slider" min="0" max="100" value="100" oninput="RuView.onOpacityChange()">
-      </div>
-    </div>
-    <div class="canvas-container">
-      <canvas id="mainCanvas"></canvas>
-      <div id="three3dContainer" style="width:100%;height:100%;position:absolute;top:0;left:0;display:none"></div>
-      <div class="hover-tooltip hidden" id="hoverTooltip"></div>
+    <div class="status-bar">
+      <span>TX: <span class="active">Mobile Wi-Fi (center)</span></span>
+      <span>RX: <span class="active">AX210 Laptop</span></span>
+      <span>検出限界: <span class="active">≈ 3cm(金属) / 5cm(非金属)</span></span>
     </div>
   </div>
 
-  <!-- CENTER: 3D view -->
-  <div class="panel room3d-panel">
-    <h2>3D 部屋ビュー</h2>
-    <canvas id="room3dCanvas"></canvas>
-    <h2 style="margin-top:8px">推定結果</h2>
-    <div class="info-grid">
-      <div class="info-item"><div class="label">幅 (東西)</div><div class="value" id="valW">—</div><div class="unit">m</div></div>
-      <div class="info-item"><div class="label">奥行 (南北)</div><div class="value" id="valD">—</div><div class="unit">m</div></div>
-      <div class="info-item"><div class="label">天井高</div><div class="value" id="valH">—</div><div class="unit">m</div></div>
-      <div class="info-item"><div class="label">面積</div><div class="value" id="valArea">—</div><div class="unit">m²</div></div>
-      <div class="info-item"><div class="label">配管・配線</div><div class="value" id="valPipes">—</div><div class="unit">本</div></div>
-      <div class="info-item alert"><div class="label">異物検出</div><div class="value" id="valForeign">—</div><div class="unit">個</div></div>
-    </div>
-    <div class="foreign-alert" id="foreignAlert">
-      <h3><span class="blink">⚠</span> 不審デバイス検出</h3>
-      <div id="foreignList"></div>
-    </div>
-    <h2 style="margin-top:8px">凡例</h2>
-    <div class="legend">
-      <div class="legend-item"><div class="legend-color" style="background:#4fc3f7"></div>壁面</div>
-      <div class="legend-item"><div class="legend-color" style="background:#ef5350"></div>金属管</div>
-      <div class="legend-item"><div class="legend-color" style="background:#ffa726"></div>電気配線</div>
-      <div class="legend-item"><div class="legend-color" style="background:#66bb6a"></div>塩ビ管</div>
-      <div class="legend-item"><div class="legend-color" style="background:#ce93d8"></div>間柱</div>
-      <div class="legend-item"><div class="legend-color" style="background:#ff1744;box-shadow:0 0 6px #ff1744"></div>異物</div>
-    </div>
-    <h2 style="margin-top:8px">ログ</h2>
-    <div class="log-area" id="logArea"></div>
-  </div>
-
-  <!-- RIGHT: Controls + Scan points -->
-  <div class="panel" style="display:flex;flex-direction:column;gap:6px">
-    <h2>計測ポイント (5箇所)</h2>
-    <div style="font-size:10px;color:#6a7a9a;margin-bottom:4px;padding:4px 6px;background:#080c14;border-radius:3px">
-      ① モバイルWi-Fiを部屋中心に設置<br>
-      ② 各ポイントにノートPCを移動し「スキャン」を押す<br>
-      ③ 2.4GHz+5GHz(80MHz)+5GHz(160MHz)=約1.5分/箇所を自動計測<br>
-      ④ 全5箇所完了後「スキャン結果を3D化」を実行
-    </div>
-    <div class="room-input" id="roomInputSection">
-      <h2>部屋寸法入力 (必須)</h2>
-      <div class="room-input-warn" id="roomInputWarn">⚠ スキャン前に部屋寸法を入力してください</div>
-      <div class="room-fields">
-        <div class="room-field">
-          <label>幅 (東西) m</label>
-          <input type="number" id="inputW" step="0.1" min="1" max="50" placeholder="例: 7.2">
+  <div class="main">
+    <!-- LEFT: Main view -->
+    <div class="panel view-panel">
+      <div class="tab-bar" id="tabBar">
+        <div class="tab-btn active" data-view="floor" onclick="RuView.switchView('floor')">⬜ 床面<span
+            class="badge hidden" id="badge-floor"></span></div>
+        <div class="tab-btn" data-view="ceiling" onclick="RuView.switchView('ceiling')">⬛ 天井<span class="badge hidden"
+            id="badge-ceiling"></span></div>
+        <div class="tab-btn" data-view="north" onclick="RuView.switchView('north')">▲ 北壁<span class="badge hidden"
+            id="badge-north"></span></div>
+        <div class="tab-btn" data-view="south" onclick="RuView.switchView('south')">▼ 南壁<span class="badge hidden"
+            id="badge-south"></span></div>
+        <div class="tab-btn" data-view="east" onclick="RuView.switchView('east')">▶ 東壁<span class="badge hidden"
+            id="badge-east"></span></div>
+        <div class="tab-btn" data-view="west" onclick="RuView.switchView('west')">◀ 西壁<span class="badge hidden"
+            id="badge-west"></span></div>
+        <div class="tab-btn" data-view="3d" onclick="RuView.switchView('3d')">🧊 3D</div>
+      </div>
+      <div class="controls-row">
+        <div class="filter-bar">
+          <div class="filter-btn" data-filter="infra" onclick="RuView.toggleFilter('infra')">
+            <div class="dot" style="background:#4fc3f7"></div>配管・配線
+          </div>
+          <div class="filter-btn on" data-filter="foreign" onclick="RuView.toggleFilter('foreign')">
+            <div class="dot" style="background:#ff1744"></div>異物
+          </div>
+          <div class="filter-btn on" data-filter="heatmap" onclick="RuView.toggleFilter('heatmap')">
+            <div class="dot" style="background:rgba(150,100,200,.6)"></div>ヒートマップ
+          </div>
         </div>
-        <div class="room-field">
-          <label>奥行 (南北) m</label>
-          <input type="number" id="inputD" step="0.1" min="1" max="50" placeholder="例: 5.4">
+        <div class="sep"></div>
+        <div class="freq-bar">
+          <div class="freq-btn active" data-freq="mix" onclick="RuView.switchFreq('mix')">Mix</div>
+          <div class="freq-btn" data-freq="24" onclick="RuView.switchFreq('24')">2.4G</div>
+          <div class="freq-btn" data-freq="5" onclick="RuView.switchFreq('5')">5G</div>
+          <div class="freq-btn" data-freq="160" onclick="RuView.switchFreq('160')">160M</div>
         </div>
-        <div class="room-field">
-          <label>天井高 m</label>
-          <input type="number" id="inputH" step="0.1" min="1" max="20" placeholder="例: 2.7">
+        <div class="sep"></div>
+        <div class="cmap-bar">
+          <div class="cmap-btn active" data-cmap="thermal" onclick="RuView.switchColorMap('thermal')">サーマル</div>
+          <div class="cmap-btn" data-cmap="heat" onclick="RuView.switchColorMap('heat')">ヒート</div>
+          <div class="cmap-btn" data-cmap="cool" onclick="RuView.switchColorMap('cool')">クール</div>
+          <div class="cmap-btn" data-cmap="grayscale" onclick="RuView.switchColorMap('grayscale')">グレー</div>
+          <div class="cmap-btn" data-cmap="rainbow" onclick="RuView.switchColorMap('rainbow')">虹</div>
+        </div>
+        <div class="sep"></div>
+        <div class="preset-bar">
+          <div class="analysis-btn active" data-analysis="normal" onclick="RuView.switchAnalysis('normal')">通常</div>
+          <div class="analysis-btn" data-analysis="diff" onclick="RuView.switchAnalysis('diff')">壁反射カット</div>
+          <div class="analysis-btn" data-analysis="enhanced" onclick="RuView.switchAnalysis('enhanced')">構造物強調</div>
+        </div>
+
+      </div>
+      <div class="slider-row">
+        <div class="slider-group">
+          <label class="slider-label">下限 <span id="sliderLowerVal">0.00</span></label>
+          <input type="range" id="sliderLower" class="depth-slider" min="0" max="100" value="0"
+            oninput="RuView.onSliderChange()">
+        </div>
+        <div class="slider-group">
+          <label class="slider-label">上限 <span id="sliderUpperVal">1.00</span></label>
+          <input type="range" id="sliderUpper" class="depth-slider" min="0" max="100" value="100"
+            oninput="RuView.onSliderChange()">
+        </div>
+        <div class="slider-group slider-group-sm">
+          <label class="slider-label">不透明度 <span id="sliderOpacityVal">100%</span></label>
+          <input type="range" id="sliderOpacity" class="depth-slider opacity-slider" min="0" max="100" value="100"
+            oninput="RuView.onOpacityChange()">
         </div>
       </div>
-      <button class="btn" id="btnConfirmRoom" onclick="RuView.confirmRoom()">寸法を確定</button>
-      <div class="room-confirmed hidden" id="roomConfirmed">✓ 確定済み: <span id="roomConfirmedText"></span></div>
-    </div>
-    <div class="scan-list" id="scanList"></div>
-    <div style="margin-top:6px">
-      <button class="btn go" id="btnBuild" onclick="RuView.buildResult()" disabled>スキャン結果を 3D 化</button>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <button class="btn" id="btnExportPDF" onclick="RuView.exportPDF()" style="flex:1;background:#1565c0;color:#fff;font-size:11px" disabled>PDF</button>
-        <button class="btn" id="btnExportCSV" onclick="RuView.exportCSV()" style="flex:1;background:#2e7d32;color:#fff;font-size:11px" disabled>CSV</button>
+      <div class="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+        <div id="three3dContainer" style="width:100%;height:100%;position:absolute;top:0;left:0;display:none"></div>
+        <div class="hover-tooltip hidden" id="hoverTooltip"></div>
       </div>
-      <button class="btn" onclick="RuView.resetAll()">リセット</button>
     </div>
-    <div id="globalStatus" style="font-size:10px;color:#5a6a7a;margin-top:2px">全5箇所の計測を行ってください</div>
-  </div>
-</div>
 
-<script src="/static/js/websocket.js"></script>
-<script src="/static/js/scan_control.js"></script>
-<script src="/static/js/heatmap_renderer.js"></script>
-<script src="/static/js/floor_renderer.js"></script>
-<script src="/static/js/lib/html2canvas.min.js"></script>
-    <script src="/static/js/lib/jspdf.umd.min.js"></script>
-    <script src="/static/js/lib/three.min.js"></script>
-<script src="/static/js/lib/OrbitControls.js"></script>
-<script src="/static/js/room3d.js"></script>
-<script src="/static/js/room3d_three.js"></script>
-<script src="/static/js/audio.js"></script>
-<script src="/static/js/app.js"></script>
-    <script src="/static/js/report.js"></script>
-
-<!-- 異物検出モーダル -->
-<div id="foreignModal" class="foreign-modal hidden" onclick="if(event.target===this)RuView.closeForeignModal()">
-  <div class="foreign-modal-content">
-    <div class="foreign-modal-header">
-      <span>⚠ 不審デバイス検出レポート</span>
-      <button class="foreign-modal-close" onclick="RuView.closeForeignModal()">✕</button>
+    <!-- CENTER: 3D view -->
+    <div class="panel room3d-panel">
+      <h2>3D 部屋ビュー</h2>
+      <canvas id="room3dCanvas"></canvas>
+      <h2 style="margin-top:8px">推定結果</h2>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">幅 (東西)</div>
+          <div class="value" id="valW">—</div>
+          <div class="unit">m</div>
+        </div>
+        <div class="info-item">
+          <div class="label">奥行 (南北)</div>
+          <div class="value" id="valD">—</div>
+          <div class="unit">m</div>
+        </div>
+        <div class="info-item">
+          <div class="label">天井高</div>
+          <div class="value" id="valH">—</div>
+          <div class="unit">m</div>
+        </div>
+        <div class="info-item">
+          <div class="label">面積</div>
+          <div class="value" id="valArea">—</div>
+          <div class="unit">m²</div>
+        </div>
+        <div class="info-item">
+          <div class="label">配管・配線</div>
+          <div class="value" id="valPipes">—</div>
+          <div class="unit">本</div>
+        </div>
+        <div class="info-item alert">
+          <div class="label">異物検出</div>
+          <div class="value" id="valForeign">—</div>
+          <div class="unit">個</div>
+        </div>
+      </div>
+      <div class="foreign-alert" id="foreignAlert">
+        <h3><span class="blink">⚠</span> 不審デバイス検出</h3>
+        <div id="foreignList"></div>
+      </div>
+      <h2 style="margin-top:8px">凡例</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-color" style="background:#4fc3f7"></div>壁面
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ef5350"></div>金属管
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ffa726"></div>電気配線
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#66bb6a"></div>塩ビ管
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ce93d8"></div>間柱
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ff1744;box-shadow:0 0 6px #ff1744"></div>異物
+        </div>
+      </div>
+      <h2 style="margin-top:8px">ログ</h2>
+      <div class="log-area" id="logArea"></div>
     </div>
-    <div id="foreignModalBody" class="foreign-modal-body"></div>
+
+    <!-- RIGHT: Controls + Scan points -->
+    <div class="panel" style="display:flex;flex-direction:column;gap:6px">
+      <h2>計測ポイント (5箇所)</h2>
+      <div style="font-size:10px;color:#6a7a9a;margin-bottom:4px;padding:4px 6px;background:#080c14;border-radius:3px">
+        ① モバイルWi-Fiを部屋中心に設置<br>
+        ② 各ポイントにノートPCを移動し「スキャン」を押す<br>
+        ③ 2.4GHz+5GHz(80MHz)+5GHz(160MHz)=約1.5分/箇所を自動計測<br>
+        ④ 全5箇所完了後「スキャン結果を3D化」を実行
+      </div>
+      <div class="room-input" id="roomInputSection">
+        <h2>部屋寸法入力 (必須)</h2>
+        <div class="room-input-warn" id="roomInputWarn">⚠ スキャン前に部屋寸法を入力してください</div>
+        <div class="room-fields">
+          <div class="room-field">
+            <label>幅 (東西) m</label>
+            <input type="number" id="inputW" step="0.1" min="1" max="50" placeholder="例: 7.2">
+          </div>
+          <div class="room-field">
+            <label>奥行 (南北) m</label>
+            <input type="number" id="inputD" step="0.1" min="1" max="50" placeholder="例: 5.4">
+          </div>
+          <div class="room-field">
+            <label>天井高 m</label>
+            <input type="number" id="inputH" step="0.1" min="1" max="20" placeholder="例: 2.7">
+          </div>
+        </div>
+        <button class="btn" id="btnConfirmRoom" onclick="RuView.confirmRoom()">寸法を確定</button>
+        <div class="room-confirmed hidden" id="roomConfirmed">✓ 確定済み: <span id="roomConfirmedText"></span></div>
+      </div>
+      <div class="scan-list" id="scanList"></div>
+      <div style="margin-top:6px">
+        <button class="btn go" id="btnBuild" onclick="RuView.buildResult()" disabled>スキャン結果を 3D 化</button>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="btnExportPDF" onclick="RuView.exportPDF()"
+            style="flex:1;background:#1565c0;color:#fff;font-size:11px" disabled>PDF</button>
+          <button class="btn" id="btnExportCSV" onclick="RuView.exportCSV()"
+            style="flex:1;background:#2e7d32;color:#fff;font-size:11px" disabled>CSV</button>
+        </div>
+        <button class="btn" onclick="RuView.resetAll()">リセット</button>
+      </div>
+      <div id="globalStatus" style="font-size:10px;color:#5a6a7a;margin-top:2px">全5箇所の計測を行ってください</div>
+    </div>
   </div>
-</div>
+
+  <script src="/static/js/websocket.js"></script>
+  <script src="/static/js/scan_control.js"></script>
+  <script src="/static/js/heatmap_renderer.js"></script>
+  <script src="/static/js/floor_renderer.js"></script>
+  <script src="/static/js/lib/html2canvas.min.js"></script>
+  <script src="/static/js/lib/jspdf.umd.min.js"></script>
+  <script src="/static/js/lib/three.min.js"></script>
+  <script src="/static/js/lib/OrbitControls.js"></script>
+  <script src="/static/js/room3d.js"></script>
+  <script src="/static/js/room3d_three.js"></script>
+  <script src="/static/js/audio.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/report.js"></script>
+
+  <!-- 異物検出モーダル -->
+  <div id="foreignModal" class="foreign-modal hidden" onclick="if(event.target===this)RuView.closeForeignModal()">
+    <div class="foreign-modal-content">
+      <div class="foreign-modal-header">
+        <span>⚠ 不審デバイス検出レポート</span>
+        <button class="foreign-modal-close" onclick="RuView.closeForeignModal()">✕</button>
+      </div>
+      <div id="foreignModalBody" class="foreign-modal-body"></div>
+    </div>
+  </div>
 
 </body>
+
 </html>
-
-

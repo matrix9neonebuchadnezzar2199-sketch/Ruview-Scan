@@ -1,0 +1,3 @@
+python src/main.py --simulate
+
+python tests/inject_scenario.py --scenario tests/scenarios/scenario_office.yaml
