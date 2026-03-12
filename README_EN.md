@@ -23,57 +23,28 @@
 
 
 \## How It Works
-
-
-
 \### What is CSI (Channel State Information)?
-
-
-
 CSI captures the complex channel response $H(f\_k)$ for each subcarrier in a Wi-Fi frame. Amplitude encodes path loss and reflection strength; phase encodes propagation delay (ToF). Intel AX210 + \[FeitCSI](https://feitcsi.kuskosoft.com/) enables real-time CSI extraction.
-
-
-
 \### Design Philosophy
-
-
-
 \- \*\*CT-Scan-Style Wall Exploration\*\* — CSI amplitude is treated as depth. A slider filters the reflection intensity range, enabling layer-by-layer visualization from the wall surface to deep structures. Inspired by medical CT window adjustment.
-
 \- \*\*"Humans measure the room dimensions; CSI sees through the walls"\*\* — 160 MHz bandwidth provides ≈ 0.94 m distance resolution. Combined with 80 MHz (1.875 m) for higher-precision reflection pattern analysis.
-
 \- \*\*Fully Offline Operation\*\* — FeitCSI source code, drivers, and all dependencies are bundled. The first boot requires an internet connection for auto-build; subsequent runs are fully offline (rebuild only on kernel updates).
-
 \- \*\*OS-Independent Design\*\* — FeitCSI builds kernel modules from source, so it works on any Debian-based distro (Ubuntu / Kali / Debian) regardless of kernel version.
-
 \- \*\*TSCM (Technical Surveillance Countermeasures) Support\*\* — Combines RF passive scanning with CSI residual analysis to detect surveillance devices such as hidden bugs.
 
 
-
 \### Multipath Reflection Model
-
-
-
 The channel response is expressed as a multipath superposition:
-
-
-
 $$H(f\_k) = \\sum\_{n=0}^{N-1} \\alpha\_n \\cdot e^{-j2\\pi f\_k \\tau\_n}$$
-
-
-
 | Symbol | Meaning |
 |--------|---------|
 | $\\alpha\_n$ | Complex amplitude of the n-th path (varies by material reflectivity) |
 | $\\tau\_n$ | Propagation delay of the n-th path = distance / speed of light |
 | $f\_k$ | Frequency of the k-th subcarrier |
-
-
 Metal pipes, electrical wiring, and PVC pipes each have different reflectivities; the magnitude of $\\alpha\_n$ is used to estimate material type.
 
 
 \### Measurement Method: 9-Point Sequential (5 Required + 4 Optional)
-
 
 
 ```
@@ -91,7 +62,6 @@ West│④(W)    ⑤     ②(E)│ East
 
 
 TX: Mobile Wi-Fi (room center, fixed)
-
 RX: Laptop (①→②→③→④→⑤ required, ⑥→⑦→⑧→⑨ optional)
 
 ```
@@ -389,36 +359,20 @@ Each face (6 tabs) maintains independent slider values, automatically saved and 
 
 
 \### 3D Room Viewer
-
-
-
 \- Three.js-based 6-face BOX with heatmap textures on inner surfaces
-
 \- OrbitControls for rotation and zoom
-
 \- Pipes and foreign objects rendered as tubes/spheres in 3D space
-
 \- Depth slider, color map, and opacity synchronized between 2D and 3D views
 
 
 
 \### Other UI Features
-
-
-
 \- \*\*Mouse hover tooltip\*\*: Real-time display of coordinates (m) and reflection intensity (0.00–1.00) on canvas
-
 \- \*\*Filter buttons\*\*: Pipes/wiring (default OFF) / Foreign objects / Heatmap — independent toggle
-
 \- \*\*Frequency switching\*\*: Mix (all bands) / 2.4 GHz / 5 GHz (80MHz) / 5 GHz (160MHz) — instant switch
-
 \- \*\*Foreign object detection modal\*\*: Detailed report on rogue device detection
-
 \- \*\*PDF/CSV report export\*\*: Export scan results
-
 \- \*\*System status on boot\*\*: OS, NIC, FeitCSI, and monitor mode status auto-displayed in log area
-
-
 
 ---
 
@@ -607,17 +561,13 @@ sudo python src/main.py --skip-setup
 2\. \*\*Place mobile Wi-Fi at room center\*\*
 
 3\. \*\*Scan 5–9 positions sequentially\*\* — Place laptop 1m from each wall → Click "Scan"
-
 &nbsp;  (Per point: 2.4 GHz + 5 GHz 80MHz + 5 GHz 160MHz ≈ 1.5 min/point. Corner positions are optional)
 
 4\. \*\*Click "Build 3D from Scan Results"\*\*
 
 5\. \*\*Explore wall internals with the depth slider\*\*:
-
 &nbsp;  - Adjust lower/upper sliders to narrow the reflection intensity display range
-
 &nbsp;  - Switch color maps for better visibility
-
 &nbsp;  - Hover mouse to check coordinates and intensity at any point
 
 6\. \*\*Switch between 6 face tabs\*\* — Slider settings are independently maintained per face
@@ -715,34 +665,19 @@ The `--simulate` flag launches physics-based CSI simulation.
 
 
 1\. \*\*Image Source Method\*\* for wall reflection path calculation:
-
 &nbsp;  - 4 walls + ceiling + floor = 6 image routers
-
 &nbsp;  - Distance from each image → ToF
 
-
-
 2\. \*\*Pipe scatterer\*\* simulation:
-
 &nbsp;  - Metal pipes, electrical wiring, PVC pipes, wall studs defined in 3D coordinates
-
 &nbsp;  - Distance to scatterer + material-specific reflectivity → $\\alpha\_n$
 
-
-
 3\. \*\*Per-subcarrier complex channel response\*\*:
-
 &nbsp;  ```
-
 &nbsp;  H(f\_k) = Σ α\_n · exp(-j·2π·f\_k·τ\_n) + noise
-
 &nbsp;  ```
-
-
 
 4\. `set\_point()` switches measurement points: multipath structure changes based on position. All 9 points supported.
-
-
 
 ---
 
@@ -753,120 +688,62 @@ The `--simulate` flag launches physics-based CSI simulation.
 
 
 \### Phase A (Complete)
-
 \- CSI acquisition, ToF estimation, basic UI
-
 \- buildResult freeze fix, manual dimension handling, error log improvements
-
 \- SimulatedAdapter-based reflection map simulation
 
-
-
 \### Phase B (Complete)
-
 \- Complete rewrite of `reflection\_map.py`: back-projection/known-coordinate cheating → direct CSI amplitude mapping
-
 \- Depth slider (lower/upper bounds) added to UI
-
 \- `/api/result/map/{face}/{band}` grid data API added
-
 \- `heatmap\_renderer.js` → server grid rendering (`drawGrid`)
 
-
-
 \### Phase B+ (Complete)
-
 \- 5 color map switching (Thermal/Heat/Cool/Grayscale/Rainbow)
-
 \- Opacity slider
-
 \- Preset buttons (All/Surface/Shallow/Deep/Auto)
-
 \- Mouse hover tooltip (coordinates + reflection intensity)
-
 \- Canvas stretch-fill (full display, non-fixed aspect ratio)
-
 \- Pipe auto-rendering set to default OFF
 
-
-
 \### Phase C (Complete)
-
 \- Foreign object detection system (RF passive scan + CSI residual analysis)
-
 \- Threat level classification (high/medium/low/none)
-
 \- RSSI-based position estimation
-
 \- Foreign object detection modal (detailed report)
-
 \- RF simulation (3 normal APs + 2 rogue devices)
 
-
-
 \### Phase D (Complete)
-
 \- 160 MHz bandwidth support (468 subcarriers, resolution ≈ 0.94 m)
-
 \- 3-band collection (2.4 GHz → 5 GHz 80 MHz → 5 GHz 160 MHz)
-
 \- Additional 4 corner measurement points (NE/SE/SW/NW) — optional
-
 \- Measurement points 5 → 9 (5 required + 4 optional)
-
 \- UI: 160M frequency button, 3-stage progress bar, corner scan cards
-
 \- Pre-scan display of all measurement points on floor view
-
 \- API: /result/map/{face}/{band} on-demand per-band generation
 
-
-
 \### Phase E (Complete)
-
 \- Three.js 3D room viewer (6-face BOX + OrbitControls rotate/zoom)
-
 \- 6-face heatmaps as textures on 3D BOX inner surfaces
-
 \- Depth slider, color map, opacity synced with 3D view in real-time
-
 \- Heatmap ON/OFF filter unified across 2D and 3D
-
 \- Pipes and foreign objects rendered in 3D space (tubes/spheres)
-
 \- Depth filter for pipes and foreign objects (depth-property based)
-
 \- Direction labels (N/S/E/W) + measurement points (pos.1-9) in 3D space
-
 \- Depth filter applied to 2D rendering as well
-
 \- PDF/CSV report export
 
-
-
 \### Phase F-0 (Complete)
-
 \- Full migration from PicoScenes → FeitCSI (open-source, OS/kernel independent)
-
 \- Auto-setup system (8-item check: OS/Arch/CPU/NIC/FW/Headers/FeitCSI/Deps)
-
 \- Offline installer (deb/firmware/wheels bundled in setup/ folder)
-
 \- FeitCSI source auto-build (DKMS-compatible, auto-rebuild on kernel change)
-
 \- AX210 monitor mode auto-setup + FeitCSI UDP service launch
-
 \- Boot sequence integration (boot\_sequence.py → check → install → build → monitor → WebUI)
-
 \- FeitCSI UDP bridge (port 8008) + .dat binary parser
-
 \- FeitCSIAdapter added to CSI adapters (feitcsi/picoscenes/simulate, default: feitcsi)
-
 \- main.py updated (--feitcsi / --skip-setup options, auto boot result detection)
-
 \- WebUI system status display (/api/system/status + auto log display)
-
-
 
 ---
 
