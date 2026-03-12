@@ -292,7 +292,53 @@ P(τ) = 1 / |a(τ)^H Un Un^H a(τ)|
 \# a(τ) = \[1, e^{-j2πΔfτ}, ..., e^{-j2π(M-1)Δfτ}]^T
 
 ```
+### AoA Estimation: Subcarrier Smoothing MUSIC
 
+With 2×2 MIMO (2 RX antennas), the physical antenna count is insufficient for standard MUSIC to achieve meaningful angular resolution. This system overcomes this limitation using **subcarrier smoothing** to virtually expand the antenna array.
+
+#### Principle
+
+The phase gradient between adjacent OFDM subcarriers is mathematically equivalent to the phase difference between physical antenna elements. By applying a sliding window (size $L$) along the subcarrier axis, each window position yields a $(n_{rx} \times L)$-dimensional snapshot vector, effectively expanding the **virtual antenna count** to $n_{rx} \times L$.
+
+Physical array: [RX0] [RX1] → 2 elements (low resolution)
+
+After subcarrier smoothing: Window 1: [RX0_sc1 .. RX0_sc20] [RX1_sc1 .. RX1_sc20] Window 2: [RX0_sc2 .. RX0_sc21] [RX1_sc2 .. RX1_sc21] ... Window K: [RX0_scK .. RX0_sc(K+19)] [RX1_scK .. RX1_sc(K+19)] → Virtual 40 elements (160MHz, L=20)
+
+
+#### Forward-Backward Averaging
+
+To decohere coherent signals (strongly correlated multipath such as wall reflections), both the forward snapshot and its conjugate-reversed version are added to the covariance matrix:
+
+
+$$R_{FB} = \frac{1}{2K} \sum_{k=1}^{K} \left( \mathbf{s}_k \mathbf{s}_k^H + J \mathbf{s}_k^* \mathbf{s}_k^T J \right)$$
+
+where $J$ is the exchange matrix (anti-diagonal identity).
+
+#### Bandwidth vs. Virtual Antenna Count
+
+| Bandwidth | Subcarriers | Window $L$ | Virtual Antennas | Angular Resolution |
+|-----------|-------------|-----------|-----------------|-------------------|
+| 160 MHz | 468 | 20 | **40** | ≈ 2.5° |
+| 80 MHz | 234 | 15 | **30** | ≈ 3.3° |
+| 40 MHz | 114 | 10 | **20** | ≈ 5.0° |
+
+In 160 MHz mode, the system achieves angular resolution equivalent to a 40-element array, enabling separation of multiple reflection paths at the azimuth level.
+
+#### 2D MUSIC (Azimuth + Elevation)
+
+In addition to 1D azimuth-only estimation, 2D grid search over azimuth $\theta \in [-90°, +90°]$ × elevation $\phi \in [-45°, +45°]$ is supported. This enables estimation of arrival directions including ceiling and floor reflections.
+
+#### Multi-Band AoA Fusion
+
+AoA estimates from 3 bands (2.4 GHz / 5 GHz 80 MHz / 5 GHz 160 MHz) are fused with bandwidth-proportional weights. The 160 MHz result carries the highest weight. Peaks within ≈ 14° azimuth difference are matched as the same path and fused via weighted averaging. Paths confirmed across multiple bands receive a confidence boost.
+
+#### AoA × ToF → Wall Position Mapping
+
+By combining AoA (arrival direction) and ToF (distance), the 3D position of each reflection source is determined and projected onto the nearest wall surface. This information is injected into `reflection_map.py` as a Gaussian kernel, enabling more precise wall-internal structure localization compared to ToF-only estimation.
+
+            AoA (azimuth θ, elevation φ)
+                 ↗
+Meas. Point ─────→ Reflection Source (3D position) ↘ ToF (distance d) ↓ Project onto nearest wall → face, u-coordinate, v-coordinate → Add weight to reflection map
 
 
 \### Room Dimension Estimation: Image Method Inversion
@@ -745,6 +791,17 @@ The `--simulate` flag launches physics-based CSI simulation.
 \- main.py updated (--feitcsi / --skip-setup options, auto boot result detection)
 \- WebUI system status display (/api/system/status + auto log display)
 
+### Phase F-1 (Complete)
+- Subcarrier smoothing MUSIC for virtual antenna expansion (2×2 MIMO → up to 40 virtual elements)
+- 2D MUSIC (azimuth + elevation) for omnidirectional arrival estimation
+- 3-band (2.4/5GHz_80/5GHz_160) AoA fusion with bandwidth-proportional weighting
+- AoA × ToF → wall position mapping (Gaussian kernel integration into reflection map)
+- Multi-metric confidence scoring (weighted average of SNR, peak sharpness, antenna factor, power)
+- FeitCSI data format support for AoA estimation (CSIFrame metadata extension)
+- Physics-based inter-antenna phase offset in SimulatedAdapter
+- AoA integration test suite (tests/test_aoa.py)
+
+
 ---
 
 
@@ -762,7 +819,7 @@ The `--simulate` flag launches physics-based CSI simulation.
 | \*\*D\*\* | 160 MHz support (≈0.94 m resolution), additional points (5→9) | ✅ Complete |
 | \*\*E\*\* | 3D viewer (Three.js), PDF/CSV report export | ✅ Complete |
 | \*\*F-0\*\* | FeitCSI integration, auto-setup, offline setup | ✅ Complete |
-| \*\*F-1\*\* | Live calibration, AoA integration, DI patterns | 🔧 Planned |
+| **F-1** | AoA integration, subcarrier smoothing MUSIC, multi-band fusion | ✅ Complete |
 
 
 ---
