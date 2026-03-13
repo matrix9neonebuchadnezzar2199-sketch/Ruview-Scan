@@ -68,11 +68,12 @@
           <div class="cmap-btn" data-cmap="rainbow" onclick="RuView.switchColorMap('rainbow')">虹</div>
         </div>
         <div class="sep"></div>
-        <div class="preset-bar">
-          <div class="analysis-btn active" data-analysis="normal" onclick="RuView.switchAnalysis('normal')">通常</div>
-          <div class="analysis-btn" data-analysis="diff" onclick="RuView.switchAnalysis('diff')">壁反射カット</div>
-          <div class="analysis-btn" data-analysis="enhanced" onclick="RuView.switchAnalysis('enhanced')">構造物強調</div>
+        <div class="filter-bar">
+          <div class="filter-btn" data-filter="diffcut" id="btnDiffCut" onclick="RuView.toggleDiffCut()">
+            <div class="dot" style="background:#ab47bc"></div>壁反射カット
+          </div>
         </div>
+
 
       </div>
       <div class="slider-row">

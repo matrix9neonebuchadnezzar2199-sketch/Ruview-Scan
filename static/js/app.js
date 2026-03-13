@@ -8,7 +8,7 @@ const RuView = (function () {
     // --- State ---
     let currentView = 'floor';
     let currentFreq = 'mix';
-    let currentAnalysis = 'normal';
+    let diffCutEnabled = false;
     let heatmapOpacity = 1.0;
     let scanned = false;
     const filters = { infra: false, foreign: true, heatmap: true };
@@ -140,10 +140,6 @@ const RuView = (function () {
         document.querySelectorAll('.freq-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.freq === freq);
         });
-        // 解析モードボタンのアクティブ状態もリセット
-        document.querySelectorAll('.analysis-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.analysis === currentAnalysis);
-        });
         if (scanned) _fetchGridForCurrentView();
         render();
     }
@@ -158,12 +154,12 @@ const RuView = (function () {
         if (is3DMode) { _update3DTextures(); } else { render(); }
     }
 
-    /** Analysis mode switch */
-    function switchAnalysis(mode) {
-        currentAnalysis = mode;
-        document.querySelectorAll('.analysis-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.analysis === mode);
-        });
+    /** 壁反射カット トグル */
+    function toggleDiffCut() {
+        diffCutEnabled = !diffCutEnabled;
+        var btn = document.getElementById('btnDiffCut');
+        if (btn) { btn.classList.toggle('on', diffCutEnabled); }
+        addLog('壁反射カット: ' + (diffCutEnabled ? 'ON' : 'OFF'), 'log-info');
         if (scanned) {
             _fetchAllGrids();
         }
@@ -171,10 +167,8 @@ const RuView = (function () {
 
     async function _fetchAllGrids() {
         var bandParam;
-        if (currentAnalysis === 'diff') {
+        if (diffCutEnabled) {
             bandParam = 'diff';
-        } else if (currentAnalysis === 'enhanced') {
-            bandParam = 'enhanced';
         } else {
             bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
         }
@@ -191,10 +185,11 @@ const RuView = (function () {
                 }
             } catch (e) { /* skip */ }
         }
-        addLog('解析モード [' + currentAnalysis + ']: ' + loaded + '/6面 更新', 'log-info');
+        addLog('グリッド更新: ' + loaded + '/6面 (' + bandParam + ')', 'log-info');
         if (is3DMode && three3dInitialized) { _update3DTextures(); }
         render();
     }
+
 
 
 
@@ -501,7 +496,25 @@ const RuView = (function () {
                     manual_height: manualRoom.h,
                 });
                 url = API + '/build?' + params;
+            } else {
+                // 部屋寸法未入力の場合、サーバーから既存の部屋寸法を取得して使用
+                try {
+                    var roomResp = await fetch(API + '/result/room');
+                    if (roomResp.ok) {
+                        var roomData = await roomResp.json();
+                        if (roomData.width && roomData.depth && roomData.height) {
+                            var params = new URLSearchParams({
+                                manual_width: roomData.width,
+                                manual_depth: roomData.depth,
+                                manual_height: roomData.height,
+                            });
+                            url = API + '/build?' + params;
+                            addLog('  サーバー既存寸法を使用: ' + roomData.width + '×' + roomData.depth + '×' + roomData.height + 'm', 'log-info');
+                        }
+                    }
+                } catch (e) { /* 取得失敗時はパラメータなしで続行 */ }
             }
+
 
             var resp = await fetch(url, { method: 'POST' });
             if (resp.ok) {
@@ -512,17 +525,12 @@ const RuView = (function () {
                 try {
                     var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
 
-                    // ★ bandParam を定義（重複関数の代わり）
                     var bandParam;
-                    if (currentAnalysis === 'diff') {
+                    if (diffCutEnabled) {
                         bandParam = 'diff';
-                    } else if (currentAnalysis === 'enhanced') {
-                        bandParam = 'enhanced';
                     } else {
                         bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
                     }
-
-                    // ★★★ ここにあった重複の switchAnalysis() と _fetchAllGrids() は完全削除 ★★★
 
                     var loaded = 0;
                     for (var i = 0; i < faces.length; i++) {
@@ -561,13 +569,12 @@ const RuView = (function () {
 
     async function _fetchGridForCurrentView() {
         var bandParam;
-        if (currentAnalysis === 'diff') {
+        if (diffCutEnabled) {
             bandParam = 'diff';
-        } else if (currentAnalysis === 'enhanced') {
-            bandParam = 'enhanced';
         } else {
             bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
         }
+
         try {
             var resp = await fetch(API + '/result/map/' + currentView + '/' + bandParam);
             if (resp.ok) {
@@ -959,7 +966,7 @@ const RuView = (function () {
     return {
         switchView: switchView, toggleFilter: toggleFilter, switchFreq: switchFreq,
         exportPDF: exportPDF, exportCSV: exportCSV,
-        switchColorMap: switchColorMap, switchAnalysis: switchAnalysis,
+        switchColorMap: switchColorMap, toggleDiffCut: toggleDiffCut,
         buildResult: buildResult, resetAll: resetAll,
         addLog: addLog, render: render, confirmRoom: confirmRoom, isRoomReady: isRoomReady,
         onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset,

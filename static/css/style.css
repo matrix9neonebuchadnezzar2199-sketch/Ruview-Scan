@@ -1069,3 +1069,36 @@ body {
     background: rgba(255, 145, 0, 0.1);
     text-shadow: 0 0 6px rgba(255, 145, 0, 0.4);
 }
+
+/* ===== 文字視認性改善（末尾追記） ===== */
+.slider-label {
+    color: #b0c0d0
+}
+
+.info-item .label {
+    color: #9aabb0
+}
+
+.scan-point .sp-status {
+    color: #8a9aaa
+}
+
+.scan-point .sp-name {
+    color: #ddd
+}
+
+#globalStatus {
+    color: #8a9aaa !important
+}
+
+.room-field label {
+    color: #9ab0c0
+}
+
+.legend-item {
+    color: #b0bcc8
+}
+
+.log-area {
+    color: #8aaa8a
+}
