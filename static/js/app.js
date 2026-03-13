@@ -9,7 +9,9 @@ const RuView = (function () {
     let currentView = 'floor';
     let currentFreq = 'mix';
     let diffCutEnabled = false;
+    let currentColorMap = 'thermal';
     let heatmapOpacity = 1.0;
+
     let scanned = false;
     const filters = { infra: false, foreign: true, heatmap: true };
     let roomConfirmed = false;
