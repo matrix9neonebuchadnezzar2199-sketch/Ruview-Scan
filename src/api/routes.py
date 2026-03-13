@@ -290,7 +290,9 @@ async def build_result(
                 rf_scanner = RFScanner(interface=rf_iface)
                 fd = ForeignDetector(rf_scanner)
                 import asyncio
-                foreign = await fd.detect(session, maps, all_structures)
+                # ★ 基本6面のみのマップを渡す（diff/enhancedを除外）
+                base_maps = {k: v for k, v in maps.items() if k in base_faces}
+                foreign = await fd.detect(session, base_maps, all_structures)
                 state.foreign_objects = foreign
                 result["foreign"] = [
                     {
