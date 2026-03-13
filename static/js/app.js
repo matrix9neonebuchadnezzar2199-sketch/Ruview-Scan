@@ -158,46 +158,6 @@ const RuView = (function () {
         if (is3DMode) { _update3DTextures(); } else { render(); }
     }
 
-    /** Analysis mode switch */
-    function switchAnalysis(mode) {
-        currentAnalysis = mode;
-        document.querySelectorAll('.analysis-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.analysis === mode);
-        });
-        if (scanned) {
-            // 全6面のグリッドデータを解析モードに合わせて再取得
-            _fetchAllGrids();
-        }
-    }
-
-    async function _fetchAllGrids() {
-        var bandParam;
-        if (currentAnalysis === 'diff') {
-            bandParam = 'diff';
-        } else if (currentAnalysis === 'enhanced') {
-            bandParam = 'enhanced';
-        } else {
-            bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
-        }
-
-        var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-        var loaded = 0;
-        for (var i = 0; i < faces.length; i++) {
-            try {
-                var resp = await fetch(API + '/result/map/' + faces[i] + '/' + bandParam);
-                if (resp.ok) {
-                    var data = await resp.json();
-                    GRID_DATA[faces[i]] = data.grid;
-                    loaded++;
-                }
-            } catch (e) { /* skip */ }
-        }
-        addLog('解析モード [' + currentAnalysis + ']: ' + loaded + '/6面 更新', 'log-info');
-        if (is3DMode && three3dInitialized) { _update3DTextures(); }
-        render();
-    }
-
-
     /** Depth slider change */
     function onSliderChange() {
         var lowerEl = document.getElementById('sliderLower');
@@ -511,44 +471,18 @@ const RuView = (function () {
                 addLog('  反射マップ取得開始...', 'log-info');
                 try {
                     var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-                    /** Analysis mode switch */
-                    function switchAnalysis(mode) {
-                        currentAnalysis = mode;
-                        document.querySelectorAll('.analysis-btn').forEach(function (b) {
-                            b.classList.toggle('active', b.dataset.analysis === mode);
-                        });
-                        if (scanned) {
-                            // 全6面のグリッドデータを解析モードに合わせて再取得
-                            _fetchAllGrids();
-                        }
+
+                    // ★ bandParam を定義（重複関数の代わり）
+                    var bandParam;
+                    if (currentAnalysis === 'diff') {
+                        bandParam = 'diff';
+                    } else if (currentAnalysis === 'enhanced') {
+                        bandParam = 'enhanced';
+                    } else {
+                        bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
                     }
 
-                    async function _fetchAllGrids() {
-                        var bandParam;
-                        if (currentAnalysis === 'diff') {
-                            bandParam = 'diff';
-                        } else if (currentAnalysis === 'enhanced') {
-                            bandParam = 'enhanced';
-                        } else {
-                            bandParam = currentFreq === '24' ? '24' : currentFreq === '5' ? '5' : currentFreq === '160' ? '160' : 'mix';
-                        }
-
-                        var faces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-                        var loaded = 0;
-                        for (var i = 0; i < faces.length; i++) {
-                            try {
-                                var resp = await fetch(API + '/result/map/' + faces[i] + '/' + bandParam);
-                                if (resp.ok) {
-                                    var data = await resp.json();
-                                    GRID_DATA[faces[i]] = data.grid;
-                                    loaded++;
-                                }
-                            } catch (e) { /* skip */ }
-                        }
-                        addLog('解析モード [' + currentAnalysis + ']: ' + loaded + '/6面 更新', 'log-info');
-                        if (is3DMode && three3dInitialized) { _update3DTextures(); }
-                        render();
-                    }
+                    // ★★★ ここにあった重複の switchAnalysis() と _fetchAllGrids() は完全削除 ★★★
 
                     var loaded = 0;
                     for (var i = 0; i < faces.length; i++) {
@@ -564,7 +498,6 @@ const RuView = (function () {
                         }
                     }
                     addLog('  反射マップ取得: ' + loaded + '/6面', loaded === 6 ? 'log-info' : 'log-warn');
-                    // 3Dテクスチャ更新
                     if (three3dInitialized) { _update3DTextures(); }
                 } catch (gridErr) {
                     addLog('  Grid取得エラー: ' + gridErr.message, 'log-warn');
@@ -584,6 +517,7 @@ const RuView = (function () {
             btn.textContent = 'スキャン結果を 3D 化';
         }
     }
+
 
     async function _fetchGridForCurrentView() {
         var bandParam;

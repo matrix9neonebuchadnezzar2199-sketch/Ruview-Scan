@@ -186,6 +186,8 @@ def run_build(base_url: str, room: dict):
         "manual_depth": room["depth"],
         "manual_height": room["height"],
     }
+    print(f"[DEBUG] Build URL: {base_url}/api/build")
+    print(f"[DEBUG] Params: {params}")
 
     r = requests.post(
         f"{base_url}/api/build",
