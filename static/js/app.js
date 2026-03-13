@@ -11,6 +11,7 @@ const RuView = (function () {
     let diffCutEnabled = false;
     let currentColorMap = 'thermal';
     let heatmapOpacity = 1.0;
+    let contrastEnhance = false;
 
     let scanned = false;
     const filters = { infra: false, foreign: true, heatmap: true };
@@ -166,6 +167,16 @@ const RuView = (function () {
             _fetchAllGrids();
         }
     }
+
+    /** コントラスト強調 トグル */
+    function toggleContrastEnhance() {
+        contrastEnhance = !contrastEnhance;
+        var btn = document.getElementById('btnContrastEnhance');
+        if (btn) { btn.classList.toggle('on', contrastEnhance); }
+        addLog('コントラスト強調: ' + (contrastEnhance ? 'ON' : 'OFF'), 'log-info');
+        if (is3DMode) { _update3DTextures(); } else { render(); }
+    }
+
 
     async function _fetchAllGrids() {
         var bandParam;
@@ -416,8 +427,10 @@ const RuView = (function () {
                     sl.lower, sl.upper,
                     currentFreq,
                     currentColorMap,
-                    heatmapOpacity
+                    heatmapOpacity,
+                    contrastEnhance
                 );
+
             } else {
                 HeatmapRenderer.drawLegacy(mainCtx, vd, vd.pipes, vd.foreign, offX, offY, scale, currentFreq);
             }
@@ -930,14 +943,25 @@ const RuView = (function () {
     window.addEventListener('DOMContentLoaded', init);
 
     /** PDF export */
-    function exportPDF() {
-        ReportExport.exportPDF(ROOM, VIEW_DATA, GRID_DATA, scanned);
+    function exportCSV() {
+        ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned, {
+            freq: currentFreq,
+            diffCut: diffCutEnabled,
+            contrastEnhance: contrastEnhance,
+            colorMap: currentColorMap
+        });
     }
 
-    /** CSV export */
+
     function exportCSV() {
-        ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned);
+        ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned, {
+            freq: currentFreq,
+            diffCut: diffCutEnabled,
+            contrastEnhance: contrastEnhance,
+            colorMap: currentColorMap
+        });
     }
+
 
     /** F-0l: システムステータスを取得してログに表示 */
     function _fetchSystemStatus() {
@@ -968,7 +992,7 @@ const RuView = (function () {
     return {
         switchView: switchView, toggleFilter: toggleFilter, switchFreq: switchFreq,
         exportPDF: exportPDF, exportCSV: exportCSV,
-        switchColorMap: switchColorMap, toggleDiffCut: toggleDiffCut,
+        switchColorMap: switchColorMap, toggleDiffCut: toggleDiffCut, toggleContrastEnhance: toggleContrastEnhance,
         buildResult: buildResult, resetAll: resetAll,
         addLog: addLog, render: render, confirmRoom: confirmRoom, isRoomReady: isRoomReady,
         onSliderChange: onSliderChange, onOpacityChange: onOpacityChange, applyPreset: applyPreset,

@@ -1,75 +1,150 @@
 ﻿/**
- * RuView Scan - ヒートマップ描画エンジン (Phase B+: カラーマップ切替 + 透明度制御)
+ * RuView Scan - ヒートマップ描画エンジン (Phase B+ → 1-A: コントラスト自動調整追加)
  */
-const HeatmapRenderer = (function() {
+const HeatmapRenderer = (function () {
 
     /** カラーマップ定義 */
     const COLOR_MAPS = {
         thermal: {
             label: 'サーマル',
-            fn: function(t) {
+            fn: function (t) {
                 if (t < 0.5) {
                     var s = t * 2;
-                    return [30 + 90*s, 10 + 30*s, 120 + 80*s];
+                    return [30 + 90 * s, 10 + 30 * s, 120 + 80 * s];
                 } else {
                     var s = (t - 0.5) * 2;
-                    return [120 + 135*s, 40 - 20*s, 200 - 160*s];
+                    return [120 + 135 * s, 40 - 20 * s, 200 - 160 * s];
                 }
             }
         },
         heat: {
             label: 'ヒート',
-            fn: function(t) {
+            fn: function (t) {
                 if (t < 0.33) {
                     var s = t / 0.33;
                     return [Math.floor(s * 200), 0, 0];
                 } else if (t < 0.66) {
                     var s = (t - 0.33) / 0.33;
-                    return [200 + Math.floor(55*s), Math.floor(200*s), 0];
+                    return [200 + Math.floor(55 * s), Math.floor(200 * s), 0];
                 } else {
                     var s = (t - 0.66) / 0.34;
-                    return [255, 200 + Math.floor(55*s), Math.floor(255*s)];
+                    return [255, 200 + Math.floor(55 * s), Math.floor(255 * s)];
                 }
             }
         },
         cool: {
             label: 'クール',
-            fn: function(t) {
+            fn: function (t) {
                 if (t < 0.5) {
                     var s = t * 2;
-                    return [0, Math.floor(80*s), Math.floor(180 + 75*s)];
+                    return [0, Math.floor(80 * s), Math.floor(180 + 75 * s)];
                 } else {
                     var s = (t - 0.5) * 2;
-                    return [Math.floor(100*s), 80 + Math.floor(175*s), 255];
+                    return [Math.floor(100 * s), 80 + Math.floor(175 * s), 255];
                 }
             }
         },
         grayscale: {
             label: 'グレー',
-            fn: function(t) {
+            fn: function (t) {
                 var v = Math.floor(t * 255);
                 return [v, v, v];
             }
         },
         rainbow: {
             label: 'レインボー',
-            fn: function(t) {
+            fn: function (t) {
                 if (t < 0.25) {
                     var s = t / 0.25;
-                    return [0, Math.floor(s*255), 255];
+                    return [0, Math.floor(s * 255), 255];
                 } else if (t < 0.5) {
                     var s = (t - 0.25) / 0.25;
-                    return [0, 255, 255 - Math.floor(s*255)];
+                    return [0, 255, 255 - Math.floor(s * 255)];
                 } else if (t < 0.75) {
                     var s = (t - 0.5) / 0.25;
-                    return [Math.floor(s*255), 255, 0];
+                    return [Math.floor(s * 255), 255, 0];
                 } else {
                     var s = (t - 0.75) / 0.25;
-                    return [255, 255 - Math.floor(s*255), 0];
+                    return [255, 255 - Math.floor(s * 255), 0];
                 }
             }
         }
     };
+
+    /**
+     * ヒストグラム平坦化用ルックアップテーブルを構築
+     * gridの値分布を均一化し、微小な差異を強調する。
+     * @param {number[][]} grid - 2D配列 (0.0〜1.0)
+     * @param {number} bins - 量子化ビン数 (default: 256)
+     * @returns {Float32Array} LUT[0..bins-1] → 平坦化後の値 (0.0〜1.0)
+     */
+    function buildEqualizeLUT(grid, bins) {
+        bins = bins || 256;
+        var hist = new Float64Array(bins);
+        var totalPixels = 0;
+
+        for (var r = 0; r < grid.length; r++) {
+            for (var c = 0; c < grid[r].length; c++) {
+                var bin = Math.min(Math.floor(grid[r][c] * bins), bins - 1);
+                if (bin < 0) bin = 0;
+                hist[bin]++;
+                totalPixels++;
+            }
+        }
+
+        if (totalPixels === 0) return null;
+
+        // CDF (累積分布関数) を構築
+        var cdf = new Float64Array(bins);
+        cdf[0] = hist[0];
+        for (var i = 1; i < bins; i++) {
+            cdf[i] = cdf[i - 1] + hist[i];
+        }
+
+        // cdf_min: 最初の非ゼロCDF値
+        var cdfMin = 0;
+        for (var j = 0; j < bins; j++) {
+            if (cdf[j] > 0) { cdfMin = cdf[j]; break; }
+        }
+
+        // LUT: 平坦化マッピング
+        var lut = new Float32Array(bins);
+        var denom = totalPixels - cdfMin;
+        if (denom <= 0) denom = 1;
+
+        for (var k = 0; k < bins; k++) {
+            lut[k] = (cdf[k] - cdfMin) / denom;
+            if (lut[k] < 0) lut[k] = 0;
+            if (lut[k] > 1) lut[k] = 1;
+        }
+
+        return lut;
+    }
+
+    /**
+     * gridデータ全体をヒストグラム平坦化した新しいgridを返す
+     * @param {number[][]} grid - 元の2D配列 (0.0〜1.0)
+     * @returns {number[][]} 平坦化済みの2D配列
+     */
+    function equalizeGrid(grid) {
+        if (!grid || grid.length === 0 || grid[0].length === 0) return grid;
+
+        var bins = 256;
+        var lut = buildEqualizeLUT(grid, bins);
+        if (!lut) return grid;
+
+        var result = [];
+        for (var r = 0; r < grid.length; r++) {
+            var row = new Array(grid[r].length);
+            for (var c = 0; c < grid[r].length; c++) {
+                var bin = Math.min(Math.floor(grid[r][c] * bins), bins - 1);
+                if (bin < 0) bin = 0;
+                row[c] = lut[bin];
+            }
+            result.push(row);
+        }
+        return result;
+    }
 
     /**
      * gridデータをCanvasに描画
@@ -84,15 +159,19 @@ const HeatmapRenderer = (function() {
      * @param {string} freqTint - 周波数色味 ('mix'|'24'|'5')
      * @param {string} colorMapId - カラーマップID
      * @param {number} opacity - 全体透明度 (0.0〜1.0)
+     * @param {boolean} equalize - ヒストグラム平坦化の有無 (default: false)
      */
-    function drawGrid(ctx, grid, offX, offY, drawW, drawH, lower, upper, freqTint, colorMapId, opacity) {
+    function drawGrid(ctx, grid, offX, offY, drawW, drawH, lower, upper, freqTint, colorMapId, opacity, equalize) {
         if (!grid || grid.length === 0 || grid[0].length === 0) return;
+
+        // 平坦化が有効な場合、描画用gridを差し替え
+        var renderGrid = (equalize === true) ? equalizeGrid(grid) : grid;
 
         var cmap = COLOR_MAPS[colorMapId] || COLOR_MAPS.thermal;
         var opacityVal = (typeof opacity === 'number') ? opacity : 1.0;
 
-        var nRows = grid.length;
-        var nCols = grid[0].length;
+        var nRows = renderGrid.length;
+        var nCols = renderGrid[0].length;
         var iw = Math.floor(drawW);
         var ih = Math.floor(drawH);
         if (iw <= 0 || ih <= 0) return;
@@ -110,11 +189,11 @@ const HeatmapRenderer = (function() {
             var row = Math.min(Math.floor(py * rowScale), nRows - 1);
             for (var px = 0; px < iw; px++) {
                 var col = Math.min(Math.floor(px * colScale), nCols - 1);
-                var val = grid[row][col];
+                var val = renderGrid[row][col];
                 var idx = (py * iw + px) * 4;
 
                 if (val < lower || val > upper) {
-                    data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 0;
+                    data[idx] = 0; data[idx + 1] = 0; data[idx + 2] = 0; data[idx + 3] = 0;
                     continue;
                 }
 
@@ -129,7 +208,7 @@ const HeatmapRenderer = (function() {
                 var baseAlpha = 40 + norm * 160;
                 var alpha = Math.floor(baseAlpha * opacityVal);
 
-                data[idx] = r; data[idx+1] = g; data[idx+2] = b; data[idx+3] = alpha;
+                data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = alpha;
             }
         }
         ctx.putImageData(imageData, Math.floor(offX), Math.floor(offY));
@@ -248,6 +327,7 @@ const HeatmapRenderer = (function() {
     return {
         drawGrid: drawGrid,
         drawLegacy: drawLegacy,
+        equalizeGrid: equalizeGrid,
         calcHistogram: calcHistogram,
         probeGrid: probeGrid,
         getColorMapIds: getColorMapIds,
