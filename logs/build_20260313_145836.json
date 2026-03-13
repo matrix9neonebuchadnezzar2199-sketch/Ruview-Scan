@@ -1,0 +1,537 @@
+{
+  "meta": {
+    "timestamp": "2026-03-13T14:58:34.947704",
+    "version": "1.0.0",
+    "mode": "simulate"
+  },
+  "input": {
+    "manual_dims": {
+      "width": 7.2,
+      "depth": 5.4,
+      "height": 2.7
+    },
+    "completed_points": [
+      "north",
+      "east",
+      "south",
+      "west",
+      "center"
+    ],
+    "total_captures": 5
+  },
+  "tof_estimation": {
+    "width": 3.3,
+    "depth": 3.4,
+    "height": 4.1
+  },
+  "room_fusion": {
+    "method": "weighted_average",
+    "manual_weight": 0.8,
+    "tof_weight": 0.2,
+    "fused": {
+      "width": 6.4,
+      "depth": 5.0,
+      "height": 3.0
+    }
+  },
+  "reflection_maps": {
+    "floor": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.1085,
+      "max": 1.0,
+      "mean": 0.5424,
+      "std": 0.2292,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "ceiling": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.1085,
+      "max": 1.0,
+      "mean": 0.5424,
+      "std": 0.2292,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "north": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.0784,
+      "max": 1.0,
+      "mean": 0.5034,
+      "std": 0.2511,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "south": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.0788,
+      "max": 1.0,
+      "mean": 0.5039,
+      "std": 0.2509,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "west": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.1223,
+      "max": 1.0,
+      "mean": 0.5664,
+      "std": 0.2333,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "east": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.1209,
+      "max": 1.0,
+      "mean": 0.5647,
+      "std": 0.2339,
+      "nonzero_ratio": 1.0,
+      "band": "mix"
+    },
+    "floor_diff": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.082,
+      "max": 1.0,
+      "mean": 0.5212,
+      "std": 0.2442,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "floor_enhanced": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.2864,
+      "max": 1.0,
+      "mean": 0.7,
+      "std": 0.1766,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    },
+    "ceiling_diff": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.082,
+      "max": 1.0,
+      "mean": 0.5212,
+      "std": 0.2442,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "ceiling_enhanced": {
+      "shape": [
+        100,
+        128
+      ],
+      "min": 0.2864,
+      "max": 1.0,
+      "mean": 0.7,
+      "std": 0.1766,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    },
+    "north_diff": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.0567,
+      "max": 1.0,
+      "mean": 0.4782,
+      "std": 0.2609,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "north_enhanced": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.2381,
+      "max": 1.0,
+      "mean": 0.6635,
+      "std": 0.1947,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    },
+    "south_diff": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.0497,
+      "max": 1.0,
+      "mean": 0.4679,
+      "std": 0.265,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "south_enhanced": {
+      "shape": [
+        60,
+        128
+      ],
+      "min": 0.2229,
+      "max": 1.0,
+      "mean": 0.654,
+      "std": 0.2005,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    },
+    "west_diff": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.1333,
+      "max": 1.0,
+      "mean": 0.5845,
+      "std": 0.2278,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "west_enhanced": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.365,
+      "max": 1.0,
+      "mean": 0.7488,
+      "std": 0.1542,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    },
+    "east_diff": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.1277,
+      "max": 1.0,
+      "mean": 0.5775,
+      "std": 0.2299,
+      "nonzero_ratio": 1.0,
+      "band": "mix_diff"
+    },
+    "east_enhanced": {
+      "shape": [
+        60,
+        100
+      ],
+      "min": 0.3573,
+      "max": 1.0,
+      "mean": 0.7437,
+      "std": 0.1564,
+      "nonzero_ratio": 1.0,
+      "band": "mix_enhanced"
+    }
+  },
+  "structures": [
+    {
+      "face": "floor",
+      "x1": 3.2,
+      "y1": 0.45,
+      "x2": 3.2,
+      "y2": 4.5,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.784,
+      "label": "床下金属管"
+    },
+    {
+      "face": "floor",
+      "x1": 0.25,
+      "y1": 2.48,
+      "x2": 6.15,
+      "y2": 2.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.473,
+      "label": "床下塩ビ管"
+    },
+    {
+      "face": "ceiling",
+      "x1": 3.2,
+      "y1": 0.45,
+      "x2": 3.2,
+      "y2": 4.5,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.784,
+      "label": "天井裏金属管"
+    },
+    {
+      "face": "ceiling",
+      "x1": 0.25,
+      "y1": 2.48,
+      "x2": 6.15,
+      "y2": 2.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.473,
+      "label": "天井裏塩ビ管"
+    },
+    {
+      "face": "north",
+      "x1": 1.45,
+      "y1": 1.1,
+      "x2": 4.9,
+      "y2": 1.1,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.8,
+      "label": "北壁内金属管"
+    },
+    {
+      "face": "north",
+      "x1": 0.65,
+      "y1": 1.48,
+      "x2": 5.75,
+      "y2": 1.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.464,
+      "label": "北壁内塩ビ管"
+    },
+    {
+      "face": "south",
+      "x1": 1.45,
+      "y1": 1.1,
+      "x2": 4.95,
+      "y2": 1.1,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.8,
+      "label": "南壁内金属管"
+    },
+    {
+      "face": "south",
+      "x1": 0.65,
+      "y1": 1.48,
+      "x2": 5.75,
+      "y2": 1.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.464,
+      "label": "南壁内塩ビ管"
+    },
+    {
+      "face": "west",
+      "x1": 0.85,
+      "y1": 1.1,
+      "x2": 4.1,
+      "y2": 1.1,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.801,
+      "label": "西壁内金属管"
+    },
+    {
+      "face": "west",
+      "x1": 0.05,
+      "y1": 1.48,
+      "x2": 4.9,
+      "y2": 1.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.464,
+      "label": "西壁内塩ビ管"
+    },
+    {
+      "face": "east",
+      "x1": 0.85,
+      "y1": 1.1,
+      "x2": 4.1,
+      "y2": 1.1,
+      "material": "metal",
+      "confidence": 0.91,
+      "intensity": 0.801,
+      "label": "東壁内金属管"
+    },
+    {
+      "face": "east",
+      "x1": 0.1,
+      "y1": 1.48,
+      "x2": 4.85,
+      "y2": 1.48,
+      "material": "pvc",
+      "confidence": 0.65,
+      "intensity": 0.464,
+      "label": "東壁内塩ビ管"
+    }
+  ],
+  "foreign": [
+    {
+      "face": "floor",
+      "x": 3.2,
+      "y": 1.47,
+      "radius": 1.43,
+      "confidence": 0.68,
+      "label": "床内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.72 / サイズ3259px / 143cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "floor",
+      "x": 3.21,
+      "y": 3.45,
+      "radius": 1.44,
+      "confidence": 0.68,
+      "label": "床内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.72 / サイズ3337px / 144cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "ceiling",
+      "x": 3.2,
+      "y": 1.47,
+      "radius": 1.43,
+      "confidence": 0.88,
+      "label": "不審デバイス (隠しAP)",
+      "detail": "RF+CSI統合検出 / 2.4GHz ch6 信号-28.0dBm / SSID:非公開 / BSSID:..44:55:66 + CSI残差検出 / 強度0.72 / サイズ3259px / 143cm",
+      "detection_method": "both",
+      "threat_level": "high"
+    },
+    {
+      "face": "ceiling",
+      "x": 3.21,
+      "y": 3.45,
+      "radius": 1.44,
+      "confidence": 0.68,
+      "label": "天井内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.72 / サイズ3337px / 144cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "north",
+      "x": 3.19,
+      "y": 0.69,
+      "radius": 1.19,
+      "confidence": 0.93,
+      "label": "不審デバイス (近距離/壁内)",
+      "detail": "RF+CSI統合検出 / 2.4GHz ch1 信号-15.0dBm / SSID:ESP_CAM_01 / BSSID:..99:AA:BB + CSI残差検出 / 強度0.78 / サイズ2256px / 119cm",
+      "detection_method": "both",
+      "threat_level": "high"
+    },
+    {
+      "face": "north",
+      "x": 3.19,
+      "y": 1.89,
+      "radius": 0.82,
+      "confidence": 0.62,
+      "label": "北壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.65 / サイズ1079px / 82cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "south",
+      "x": 3.19,
+      "y": 0.69,
+      "radius": 1.19,
+      "confidence": 0.73,
+      "label": "南壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.78 / サイズ2255px / 119cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "south",
+      "x": 3.19,
+      "y": 1.89,
+      "radius": 0.82,
+      "confidence": 0.62,
+      "label": "南壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.65 / サイズ1079px / 82cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "west",
+      "x": 2.47,
+      "y": 0.69,
+      "radius": 1.16,
+      "confidence": 0.73,
+      "label": "西壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.79 / サイズ2136px / 116cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "west",
+      "x": 2.47,
+      "y": 1.89,
+      "radius": 0.8,
+      "confidence": 0.62,
+      "label": "西壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.65 / サイズ1032px / 80cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "east",
+      "x": 2.47,
+      "y": 0.69,
+      "radius": 1.15,
+      "confidence": 0.73,
+      "label": "東壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.79 / サイズ2125px / 115cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    },
+    {
+      "face": "east",
+      "x": 2.47,
+      "y": 1.89,
+      "radius": 0.8,
+      "confidence": 0.62,
+      "label": "東壁内 不明反射源",
+      "detail": "CSI残差検出 / 強度0.65 / サイズ1027px / 80cm",
+      "detection_method": "csi",
+      "threat_level": "high"
+    }
+  ],
+  "timing": {
+    "tof_estimation_ms": 1676.5,
+    "reflection_map_ms": 48.4,
+    "structure_detection_ms": 3.1,
+    "foreign_detection_ms": 7.4,
+    "total_ms": 1737.2
+  },
+  "errors": [],
+  "summary": {
+    "room": "6.4x5.0x3.0m",
+    "maps_generated": 18,
+    "structures_detected": 12,
+    "foreign_detected": 12
+  }
+}

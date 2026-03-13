@@ -197,7 +197,12 @@ async def build_result(
     manual_depth: Optional[float] = Query(None),
     manual_height: Optional[float] = Query(None),
 ):
-    """スキャン結果を3D化 (部屋推定 + 反射マップ + 構造物検出)"""
+    """スキャン結果を3D化 (部屋推定 + 反射マップ + 構造物検出) + JSONログ出力"""
+    import json
+    import os
+    import numpy as np
+    from datetime import datetime
+
     if not state.scan_manager or not state.scan_manager.current_session:
         raise HTTPException(400, detail="No scan session")
 
@@ -208,9 +213,42 @@ async def build_result(
             detail=f"All 5 points required. Completed: {session.completed_points}"
         )
 
+    # === ビルドログ初期化 ===
+    build_log = {
+        "meta": {
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0",
+            "mode": state.config.get("csi", {}).get("source", "unknown"),
+        },
+        "input": {
+            "manual_dims": {
+                "width": manual_width,
+                "depth": manual_depth,
+                "height": manual_height,
+            },
+            "completed_points": list(session.completed_points),
+            "total_captures": len(session.captures) if hasattr(session, 'captures') else 0,
+        },
+        "tof_estimation": None,
+        "room_fusion": None,
+        "reflection_maps": {},
+        "structures": [],
+        "foreign": [],
+        "timing": {},
+        "errors": [],
+    }
+    t_total_start = time.time()
+
     try:
         # 1. ToF による部屋寸法推定
+        t0 = time.time()
         tof_dims = state.room_estimator.estimate(session)
+        build_log["timing"]["tof_estimation_ms"] = round((time.time() - t0) * 1000, 1)
+        build_log["tof_estimation"] = {
+            "width": tof_dims.width,
+            "depth": tof_dims.depth,
+            "height": tof_dims.height,
+        }
         logger.info(f"ToF推定寸法: {tof_dims.width}×{tof_dims.depth}×{tof_dims.height}")
 
         # 2. 手動入力値との融合 (手動 80%, ToF 20%)
@@ -222,10 +260,20 @@ async def build_result(
             fused_h = round(manual_height * MANUAL_WEIGHT + tof_dims.height * TOF_WEIGHT, 1)
             from src.utils.geo_utils import RoomDimensions
             state.room_dims = RoomDimensions(width=fused_w, depth=fused_d, height=fused_h)
+            build_log["room_fusion"] = {
+                "method": "weighted_average",
+                "manual_weight": MANUAL_WEIGHT,
+                "tof_weight": TOF_WEIGHT,
+                "fused": {"width": fused_w, "depth": fused_d, "height": fused_h},
+            }
             logger.info(f"融合寸法: {fused_w}×{fused_d}×{fused_h} "
                         f"(手動: {manual_width}×{manual_depth}×{manual_height})")
         else:
             state.room_dims = tof_dims
+            build_log["room_fusion"] = {
+                "method": "tof_only",
+                "fused": {"width": tof_dims.width, "depth": tof_dims.depth, "height": tof_dims.height},
+            }
             logger.info("手動入力なし — ToF推定値をそのまま使用")
 
         result = {
@@ -239,26 +287,43 @@ async def build_result(
             "foreign": [],
         }
 
-        # 2. 反射マップ生成 (Phase B で実装)
+        # 3. 反射マップ生成
         try:
             from src.scan.reflection_map import ReflectionMapGenerator
             from src.fusion.band_merger import BandMerger
             from src.fusion.spatial_integrator import SpatialIntegrator
             from src.fusion.view_generator import ViewGenerator
 
+            t0 = time.time()
             rmap_gen = ReflectionMapGenerator(state.room_dims)
             maps = rmap_gen.generate(session)
+            build_log["timing"]["reflection_map_ms"] = round((time.time() - t0) * 1000, 1)
+
             # 反射マップをキャッシュに保存（diff/enhanced含む）
             state.reflection_maps = {}
             for face_key, rmap in maps.items():
                 state.reflection_maps[face_key] = rmap
-                # 基本6面のみ _mix エイリアスを追加
                 if '_' not in face_key:
                     state.reflection_maps[f"{face_key}_mix"] = rmap
 
+                # ログ: 各面のグリッド統計
+                grid = rmap.grid if hasattr(rmap, 'grid') else None
+                if grid is not None:
+                    grid_arr = np.array(grid) if not isinstance(grid, np.ndarray) else grid
+                    nonzero_ratio = float(np.count_nonzero(grid_arr > 0.01)) / max(grid_arr.size, 1)
+                    build_log["reflection_maps"][face_key] = {
+                        "shape": list(grid_arr.shape),
+                        "min": round(float(np.min(grid_arr)), 4),
+                        "max": round(float(np.max(grid_arr)), 4),
+                        "mean": round(float(np.mean(grid_arr)), 4),
+                        "std": round(float(np.std(grid_arr)), 4),
+                        "nonzero_ratio": round(nonzero_ratio, 4),
+                        "band": rmap.band if hasattr(rmap, 'band') else "unknown",
+                    }
 
-            # 3. 構造物検出 (Phase B)
+            # 4. 構造物検出
             from src.scan.structure_detector import StructureDetector
+            t0 = time.time()
             detector = StructureDetector()
             all_structures = []
             base_faces = {'floor', 'ceiling', 'north', 'south', 'east', 'west'}
@@ -266,6 +331,7 @@ async def build_result(
                 if face in base_faces:
                     structures = detector.detect(rmap)
                     all_structures.extend(structures)
+            build_log["timing"]["structure_detection_ms"] = round((time.time() - t0) * 1000, 1)
 
             state.structures = all_structures
 
@@ -278,11 +344,21 @@ async def build_result(
                 }
                 for s in all_structures
             ]
+            build_log["structures"] = [
+                {
+                    "face": s.face, "x1": round(s.x1, 3), "y1": round(s.y1, 3),
+                    "x2": round(s.x2, 3), "y2": round(s.y2, 3),
+                    "material": s.material, "confidence": round(s.confidence, 4),
+                    "intensity": round(s.intensity, 4), "label": s.label,
+                }
+                for s in all_structures
+            ]
 
-            # 4. 異物検出 (Phase C)
+            # 5. 異物検出
             try:
                 from src.scan.foreign_detector import ForeignDetector
                 from src.rf.scanner import RFScanner
+                t0 = time.time()
                 nic_cfg = state.config.get("nic", {})
                 rf_iface = nic_cfg.get("interface", "wlan0")
                 if state.nic_info:
@@ -290,9 +366,10 @@ async def build_result(
                 rf_scanner = RFScanner(interface=rf_iface)
                 fd = ForeignDetector(rf_scanner)
                 import asyncio
-                # ★ 基本6面のみのマップを渡す（diff/enhancedを除外）
                 base_maps = {k: v for k, v in maps.items() if k in base_faces}
                 foreign = await fd.detect(session, base_maps, all_structures)
+                build_log["timing"]["foreign_detection_ms"] = round((time.time() - t0) * 1000, 1)
+
                 state.foreign_objects = foreign
                 result["foreign"] = [
                     {
@@ -304,17 +381,71 @@ async def build_result(
                     }
                     for f in foreign
                 ]
+                build_log["foreign"] = [
+                    {
+                        "face": f.face, "x": round(f.x, 3), "y": round(f.y, 3),
+                        "radius": round(f.radius, 4), "confidence": round(f.confidence, 4),
+                        "label": f.label, "detail": f.detail,
+                        "detection_method": f.detection_method,
+                        "threat_level": f.threat_level,
+                    }
+                    for f in foreign
+                ]
             except ImportError:
                 logger.info("Foreign detector not yet available (Phase C)")
+                build_log["errors"].append("foreign_detector: ImportError (Phase C not available)")
 
         except ImportError:
             logger.info("Reflection map / structure detector not yet available (Phase B)")
+            build_log["errors"].append("reflection_map: ImportError (Phase B not available)")
+
+        # === ビルドログ書き出し ===
+        build_log["timing"]["total_ms"] = round((time.time() - t_total_start) * 1000, 1)
+        build_log["summary"] = {
+            "room": f"{state.room_dims.width}x{state.room_dims.depth}x{state.room_dims.height}m",
+            "maps_generated": len(build_log["reflection_maps"]),
+            "structures_detected": len(build_log["structures"]),
+            "foreign_detected": len(build_log["foreign"]),
+        }
+
+        try:
+            log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_filename = f"build_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            log_path = os.path.join(log_dir, log_filename)
+            with open(log_path, "w", encoding="utf-8") as f:
+                json.dump(build_log, f, ensure_ascii=False, indent=2)
+            logger.info(f"Build log saved: {log_path}")
+        except Exception as log_err:
+            logger.warning(f"Build log save failed: {log_err}")
 
         return result
 
     except RuViewError as e:
+        build_log["errors"].append(f"RuViewError: {e.format()}")
+        build_log["timing"]["total_ms"] = round((time.time() - t_total_start) * 1000, 1)
+        try:
+            log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_filename = f"build_ERROR_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            log_path = os.path.join(log_dir, log_filename)
+            with open(log_path, "w", encoding="utf-8") as f:
+                json.dump(build_log, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
         raise HTTPException(500, detail=e.format())
     except Exception as e:
+        build_log["errors"].append(f"Exception: {str(e)}")
+        build_log["timing"]["total_ms"] = round((time.time() - t_total_start) * 1000, 1)
+        try:
+            log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_filename = f"build_ERROR_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            log_path = os.path.join(log_dir, log_filename)
+            with open(log_path, "w", encoding="utf-8") as f:
+                json.dump(build_log, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
         logger.error(f"Build error: {e}", exc_info=True)
         raise HTTPException(500, detail=str(e))
 

@@ -51,7 +51,7 @@ const ReportExport = (function () {
      * ページ背景（ダーク）
      */
     function _darkPage(doc, pageW, pageH) {
-        doc.setFillColor(6, 12, 24);
+        doc.setFillColor(255, 255, 255);
         doc.rect(0, 0, pageW, pageH, 'F');
     }
 
@@ -60,7 +60,7 @@ const ReportExport = (function () {
      */
     function _addFooter(doc, pageW, pageH, pageNum, totalPages) {
         doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
+        doc.setTextColor(120, 120, 120);
         doc.text('RuView Scan Report — Page ' + pageNum + ' / ' + totalPages, pageW / 2, pageH - 8, { align: 'center' });
     }
 
@@ -110,9 +110,9 @@ const ReportExport = (function () {
 
     /** PDF出力 */
     async function exportPDF(ROOM, VIEW_DATA, GRID_DATA, scanned, scanCond) {
-
         if (!scanned) { alert('スキャン結果がありません'); return; }
 
+        var btn = document.getElementById('btnExportPDF');
         var cond = scanCond || {};
         cond.date = cond.date || new Date();
         cond.freq = cond.freq || 'mix';
@@ -125,6 +125,26 @@ const ReportExport = (function () {
         try {
             var jsPDF = window.jspdf.jsPDF;
             var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            // 日本語フォント登録
+            try {
+                var fontResp = await fetch('/static/fonts/NotoSansJP-Regular.ttf');
+                if (fontResp.ok) {
+                    var fontBuf = await fontResp.arrayBuffer();
+                    var fontBase64 = '';
+                    var bytes = new Uint8Array(fontBuf);
+                    var chunk = 8192;
+                    for (var ci = 0; ci < bytes.length; ci += chunk) {
+                        fontBase64 += String.fromCharCode.apply(null, bytes.subarray(ci, ci + chunk));
+                    }
+                    fontBase64 = btoa(fontBase64);
+                    doc.addFileToVFS('NotoSansJP-Regular.ttf', fontBase64);
+                    doc.addFont('NotoSansJP-Regular.ttf', 'NotoSansJP', 'normal');
+                    doc.setFont('NotoSansJP');
+                }
+            } catch (fontErr) {
+                console.warn('Japanese font load failed:', fontErr);
+            }
             var pageW = 210, pageH = 297;
             var margin = 15;
             var y = margin;
@@ -135,25 +155,25 @@ const ReportExport = (function () {
             // ============================================
             _darkPage(doc, pageW, pageH);
 
-            doc.setTextColor(79, 195, 247);
+            doc.setTextColor(20, 60, 120);
             doc.setFontSize(28);
             doc.text('RUVIEW SCAN', pageW / 2, 50, { align: 'center' });
 
             doc.setFontSize(12);
-            doc.setTextColor(150, 170, 190);
+            doc.setTextColor(80, 90, 100);
             doc.text('Wi-Fi CSI Wall Scanner Report', pageW / 2, 62, { align: 'center' });
 
-            doc.setTextColor(200, 200, 200);
+            doc.setTextColor(30, 30, 30);
             doc.setFontSize(10);
             doc.text('Date: ' + _formatDate(cond.date), pageW / 2, 80, { align: 'center' });
 
             // 部屋情報
             y = 100;
-            doc.setTextColor(79, 195, 247);
+            doc.setTextColor(20, 60, 120);
             doc.setFontSize(14);
             doc.text('Room Dimensions', margin, y);
             y += 10;
-            doc.setTextColor(200, 200, 200);
+            doc.setTextColor(30, 30, 30);
             doc.setFontSize(10);
             doc.text('Width:  ' + ROOM.w.toFixed(1) + ' m', margin + 5, y); y += 7;
             doc.text('Depth:  ' + ROOM.d.toFixed(1) + ' m', margin + 5, y); y += 7;
@@ -162,11 +182,11 @@ const ReportExport = (function () {
             doc.text('Volume: ' + (ROOM.w * ROOM.d * ROOM.h).toFixed(1) + ' m3', margin + 5, y); y += 14;
 
             // スキャン条件
-            doc.setTextColor(79, 195, 247);
+            doc.setTextColor(20, 60, 120);
             doc.setFontSize(14);
             doc.text('Scan Conditions', margin, y);
             y += 10;
-            doc.setTextColor(200, 200, 200);
+            doc.setTextColor(30, 30, 30);
             doc.setFontSize(10);
             doc.text('Frequency:          ' + _freqLabel(cond.freq), margin + 5, y); y += 7;
             doc.text('Wall Reflection Cut: ' + (cond.diffCut ? 'ON' : 'OFF'), margin + 5, y); y += 7;
@@ -198,11 +218,11 @@ const ReportExport = (function () {
                 }
             }
 
-            doc.setTextColor(79, 195, 247);
+            doc.setTextColor(20, 60, 120);
             doc.setFontSize(14);
             doc.text('Detection Summary', margin, y);
             y += 10;
-            doc.setTextColor(200, 200, 200);
+            doc.setTextColor(30, 30, 30);
             doc.setFontSize(10);
             doc.text('Structures (Pipes/Wiring): ' + totalPipes, margin + 5, y); y += 7;
             doc.text('Foreign Objects:           ' + totalForeign, margin + 5, y); y += 7;
@@ -210,7 +230,7 @@ const ReportExport = (function () {
             // 面ごとの検出数内訳
             y += 5;
             doc.setFontSize(9);
-            doc.setTextColor(150, 150, 150);
+            doc.setTextColor(80, 80, 80);
             for (var ff in VIEW_DATA) {
                 var pc = VIEW_DATA[ff].pipes.length;
                 var fc = VIEW_DATA[ff].foreign.length;
@@ -227,7 +247,7 @@ const ReportExport = (function () {
             if (mainCanvas) {
                 doc.addPage();
                 _darkPage(doc, pageW, pageH);
-                doc.setTextColor(79, 195, 247);
+                doc.setTextColor(20, 60, 120);
                 doc.setFontSize(14);
                 doc.text('Current View - 2D Heatmap', margin, margin + 5);
 
@@ -246,7 +266,7 @@ const ReportExport = (function () {
             if (threeCanvas && threeCanvas.width > 0) {
                 doc.addPage();
                 _darkPage(doc, pageW, pageH);
-                doc.setTextColor(79, 195, 247);
+                doc.setTextColor(20, 60, 120);
                 doc.setFontSize(14);
                 doc.text('3D Room View', margin, margin + 5);
 
@@ -276,13 +296,13 @@ const ReportExport = (function () {
                 _darkPage(doc, pageW, pageH);
 
                 // 面タイトル
-                doc.setTextColor(79, 195, 247);
+                doc.setTextColor(20, 60, 120);
                 doc.setFontSize(14);
                 doc.text('Heatmap: ' + (faceLabelsJa[face] || face) + ' (' + (faceLabels[face] || face) + ')', margin, margin + 5);
 
                 // 面サイズ情報
                 doc.setFontSize(9);
-                doc.setTextColor(150, 150, 150);
+                doc.setTextColor(80, 80, 80);
                 doc.text('Size: ' + vd.w.toFixed(1) + 'm x ' + vd.h.toFixed(1) + 'm', margin, margin + 13);
 
                 // ヒートマップ画像
@@ -298,11 +318,11 @@ const ReportExport = (function () {
                 var faceForeign = VIEW_DATA[face].foreign;
 
                 if (facePipes.length > 0 && faceY < pageH - 40) {
-                    doc.setTextColor(79, 195, 247);
+                    doc.setTextColor(20, 60, 120);
                     doc.setFontSize(10);
                     doc.text('Structures (' + facePipes.length + ')', margin, faceY);
                     faceY += 6;
-                    doc.setTextColor(180, 180, 180);
+                    doc.setTextColor(40, 40, 40);
                     doc.setFontSize(8);
                     for (var pi = 0; pi < facePipes.length; pi++) {
                         if (faceY > pageH - 20) break;
@@ -318,7 +338,7 @@ const ReportExport = (function () {
                     doc.setFontSize(10);
                     doc.text('Foreign Objects (' + faceForeign.length + ')', margin, faceY);
                     faceY += 6;
-                    doc.setTextColor(239, 154, 154);
+                    doc.setTextColor(180, 40, 40);
                     doc.setFontSize(8);
                     for (var fj = 0; fj < faceForeign.length; fj++) {
                         if (faceY > pageH - 20) break;
@@ -335,14 +355,14 @@ const ReportExport = (function () {
             if (pipeList.length > 0) {
                 doc.addPage();
                 _darkPage(doc, pageW, pageH);
-                doc.setTextColor(79, 195, 247);
+                doc.setTextColor(20, 60, 120);
                 doc.setFontSize(14);
                 y = margin + 5;
                 doc.text('Detected Structures — Full List (' + pipeList.length + ')', margin, y); y += 12;
 
                 // テーブルヘッダー
                 doc.setFontSize(8);
-                doc.setTextColor(100, 120, 140);
+                doc.setTextColor(60, 70, 80);
                 doc.text('#', margin, y);
                 doc.text('Face', margin + 8, y);
                 doc.text('Type', margin + 30, y);
@@ -351,17 +371,17 @@ const ReportExport = (function () {
                 doc.text('From (x,y)', margin + 110, y);
                 doc.text('To (x,y)', margin + 145, y);
                 y += 3;
-                doc.setDrawColor(40, 60, 80);
+                doc.setDrawColor(180, 180, 180);
                 doc.line(margin, y, pageW - margin, y);
                 y += 4;
 
-                doc.setTextColor(200, 200, 200);
+                doc.setTextColor(30, 30, 30);
                 for (var pi2 = 0; pi2 < pipeList.length; pi2++) {
                     if (y > pageH - 20) {
                         doc.addPage();
                         _darkPage(doc, pageW, pageH);
                         y = margin;
-                        doc.setTextColor(200, 200, 200);
+                        doc.setTextColor(30, 30, 30);
                         doc.setFontSize(8);
                     }
                     var pp2 = pipeList[pi2];
@@ -408,17 +428,17 @@ const ReportExport = (function () {
 
                     // 詳細
                     doc.setFontSize(8);
-                    doc.setTextColor(180, 180, 180);
+                    doc.setTextColor(40, 40, 40);
                     doc.text('Location: ' + (faceLabelsJa[ff2.face] || ff2.face) + ' (' + ff2.x.toFixed(2) + ', ' + ff2.y.toFixed(2) + ')m', margin + 5, y); y += 5;
                     doc.text('Confidence: ' + (ff2.conf * 100).toFixed(0) + '%    Detection: ' + (methodLabels[ff2.method] || 'N/A') + '    Est. Size: ' + ((ff2.r || 0) * 100).toFixed(0) + 'cm', margin + 5, y); y += 5;
                     if (ff2.detail) {
-                        doc.setTextColor(140, 140, 140);
+                        doc.setTextColor(90, 90, 90);
                         doc.text('Detail: ' + ff2.detail, margin + 5, y); y += 5;
                     }
                     y += 4;
 
                     // 区切り線
-                    doc.setDrawColor(40, 30, 30);
+                    doc.setDrawColor(200, 180, 180);
                     doc.line(margin, y - 2, pageW - margin, y - 2);
                 }
             }

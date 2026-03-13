@@ -943,6 +943,16 @@ const RuView = (function () {
     window.addEventListener('DOMContentLoaded', init);
 
     /** PDF export */
+    function exportPDF() {
+        ReportExport.exportPDF(ROOM, VIEW_DATA, GRID_DATA, scanned, {
+            freq: currentFreq,
+            diffCut: diffCutEnabled,
+            contrastEnhance: contrastEnhance,
+            colorMap: currentColorMap
+        });
+    }
+
+    /** CSV export */
     function exportCSV() {
         ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned, {
             freq: currentFreq,
@@ -951,18 +961,6 @@ const RuView = (function () {
             colorMap: currentColorMap
         });
     }
-
-
-    function exportCSV() {
-        ReportExport.exportCSV(ROOM, VIEW_DATA, GRID_DATA, scanned, {
-            freq: currentFreq,
-            diffCut: diffCutEnabled,
-            contrastEnhance: contrastEnhance,
-            colorMap: currentColorMap
-        });
-    }
-
-
     /** F-0l: システムステータスを取得してログに表示 */
     function _fetchSystemStatus() {
         fetch('/api/system/status')
