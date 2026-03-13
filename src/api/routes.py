@@ -214,7 +214,7 @@ async def build_result(
         logger.info(f"ToF推定寸法: {tof_dims.width}×{tof_dims.depth}×{tof_dims.height}")
 
         # 2. 手動入力値との融合 (手動 80%, ToF 20%)
-        if manual_width and manual_depth and manual_height:
+        if manual_width is not None and manual_depth is not None and manual_height is not None:
             MANUAL_WEIGHT = 0.8
             TOF_WEIGHT = 0.2
             fused_w = round(manual_width * MANUAL_WEIGHT + tof_dims.width * TOF_WEIGHT, 1)
